@@ -20,7 +20,7 @@ jobs:
       - name: Shell syntax
         run: bash -n scripts/*.sh sources/scripts/*.sh config-template/lesbian-stable/labwc/autostart
       - name: Shellcheck maintained entrypoints
-        run: shellcheck scripts/install-lesbian-stable.sh scripts/deploy-lesbian-stable-config.sh scripts/07-install-noctalia-greeter.sh sources/scripts/build-lesbian-labwc-deb.sh
+        run: shellcheck -x scripts/install-lesbian-stable.sh scripts/deploy-lesbian-stable-config.sh scripts/07-install-noctalia-greeter.sh sources/scripts/build-lesbian-labwc-deb.sh
       - name: Parse configuration
         run: |
           python3 - <<'PY'
