@@ -1,0 +1,153 @@
+diff --git a/include/wlr/types/wlr_scene.h b/include/wlr/types/wlr_scene.h
+index 6c627b1f..b2b30571 100644
+--- a/include/wlr/types/wlr_scene.h
++++ b/include/wlr/types/wlr_scene.h
+@@ -193,6 +193,8 @@ struct wlr_scene_buffer {
+ 	int dst_width, dst_height;
+ 	enum wl_output_transform transform;
+ 	pixman_region32_t opaque_region;
++	pixman_region32_t clip_region;
++	bool has_clip_region;
+ 	enum wlr_color_transfer_function transfer_function;
+ 	enum wlr_color_named_primaries primaries;
+ 	enum wlr_color_encoding color_encoding;
+@@ -523,6 +525,13 @@ void wlr_scene_buffer_set_buffer_with_options(struct wlr_scene_buffer *scene_buf
+ void wlr_scene_buffer_set_opaque_region(struct wlr_scene_buffer *scene_buffer,
+ 	const pixman_region32_t *region);
+ 
++/**
++ * Restrict rendering and input to a buffer-local region. Pass NULL to disable
++ * clipping. The region uses scene destination coordinates after transforms.
++ */
++void wlr_scene_buffer_set_clip_region(struct wlr_scene_buffer *scene_buffer,
++	const pixman_region32_t *region);
++
+ /**
+  * Set the source rectangle describing the region of the buffer which will be
+  * sampled to render this node. This allows cropping the buffer.
+diff --git a/types/scene/wlr_scene.c b/types/scene/wlr_scene.c
+index 7bc8b767..a7f8c84b 100644
+--- a/types/scene/wlr_scene.c
++++ b/types/scene/wlr_scene.c
+@@ -127,6 +127,7 @@ void wlr_scene_node_destroy(struct wlr_scene_node *node) {
+ 		scene_buffer_set_buffer(scene_buffer, NULL);
+ 		scene_buffer_set_texture(scene_buffer, NULL);
+ 		pixman_region32_fini(&scene_buffer->opaque_region);
++		pixman_region32_fini(&scene_buffer->clip_region);
+ 		wlr_drm_syncobj_timeline_unref(scene_buffer->wait_timeline);
+ 
+ 		assert(wl_list_empty(&scene_buffer->events.output_leave.listener_list));
+@@ -281,12 +282,31 @@ static void scene_node_opaque_region(struct wlr_scene_node *node, int x, int y,
+ 			pixman_region32_copy(opaque, &scene_buffer->opaque_region);
+ 			pixman_region32_intersect_rect(opaque, opaque, 0, 0, width, height);
+ 			pixman_region32_translate(opaque, x, y);
++			if (scene_buffer->has_clip_region) {
++				pixman_region32_t clip;
++				pixman_region32_init(&clip);
++				pixman_region32_copy(&clip, &scene_buffer->clip_region);
++				pixman_region32_translate(&clip, x, y);
++				pixman_region32_intersect(opaque, opaque, &clip);
++				pixman_region32_fini(&clip);
++			}
+ 			return;
+ 		}
+ 	}
+ 
+ 	pixman_region32_fini(opaque);
+ 	pixman_region32_init_rect(opaque, x, y, width, height);
++	if (node->type == WLR_SCENE_NODE_BUFFER) {
++		struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
++		if (scene_buffer->has_clip_region) {
++			pixman_region32_t clip;
++			pixman_region32_init(&clip);
++			pixman_region32_copy(&clip, &scene_buffer->clip_region);
++			pixman_region32_translate(&clip, x, y);
++			pixman_region32_intersect(opaque, opaque, &clip);
++			pixman_region32_fini(&clip);
++		}
++	}
+ }
+ 
+ struct scene_update_data {
+@@ -883,6 +903,7 @@ struct wlr_scene_buffer *wlr_scene_buffer_create(struct wlr_scene_tree *parent,
+ 	wl_signal_init(&scene_buffer->events.frame_done);
+ 
+ 	pixman_region32_init(&scene_buffer->opaque_region);
++	pixman_region32_init(&scene_buffer->clip_region);
+ 	wl_list_init(&scene_buffer->buffer_release.link);
+ 	wl_list_init(&scene_buffer->renderer_destroy.link);
+ 	scene_buffer->opacity = 1;
+@@ -1079,6 +1100,25 @@ void wlr_scene_buffer_set_opaque_region(struct wlr_scene_buffer *scene_buffer,
+ 	pixman_region32_fini(&update_region);
+ }
+ 
++void wlr_scene_buffer_set_clip_region(struct wlr_scene_buffer *scene_buffer,
++		const pixman_region32_t *region) {
++	if (!region) {
++		if (!scene_buffer->has_clip_region) {
++			return;
++		}
++		pixman_region32_clear(&scene_buffer->clip_region);
++		scene_buffer->has_clip_region = false;
++	} else {
++		if (scene_buffer->has_clip_region &&
++				pixman_region32_equal(&scene_buffer->clip_region, region)) {
++			return;
++		}
++		pixman_region32_copy(&scene_buffer->clip_region, region);
++		scene_buffer->has_clip_region = true;
++	}
++	scene_node_update(&scene_buffer->node, NULL);
++}
++
+ void wlr_scene_buffer_set_source_box(struct wlr_scene_buffer *scene_buffer,
+ 		const struct wlr_fbox *box) {
+ 	if (wlr_fbox_equal(&scene_buffer->src_box, box)) {
+@@ -1397,6 +1437,11 @@ static bool scene_node_at_iterator(struct wlr_scene_node *node,
+ 
+ 	if (node->type == WLR_SCENE_NODE_BUFFER) {
+ 		struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
++		if (scene_buffer->has_clip_region &&
++				!pixman_region32_contains_point(&scene_buffer->clip_region,
++					floor(rx), floor(ry), NULL)) {
++			return false;
++		}
+ 
+ 		if (scene_buffer->point_accepts_input &&
+ 				!scene_buffer->point_accepts_input(scene_buffer, &rx, &ry)) {
+@@ -1454,6 +1499,17 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
+ 	pixman_region32_t render_region;
+ 	pixman_region32_init(&render_region);
+ 	pixman_region32_copy(&render_region, &node->visible);
++	if (node->type == WLR_SCENE_NODE_BUFFER) {
++		struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
++		if (scene_buffer->has_clip_region) {
++			pixman_region32_t clip;
++			pixman_region32_init(&clip);
++			pixman_region32_copy(&clip, &scene_buffer->clip_region);
++			pixman_region32_translate(&clip, entry->x, entry->y);
++			pixman_region32_intersect(&render_region, &render_region, &clip);
++			pixman_region32_fini(&clip);
++		}
++	}
+ 	pixman_region32_translate(&render_region, -data->logical.x, -data->logical.y);
+ 	logical_to_buffer_coords(&render_region, data, true);
+ 	pixman_region32_intersect(&render_region, &render_region, &data->damage);
+@@ -1919,6 +1975,7 @@ struct render_list_constructor_data {
+ 
+ static bool scene_buffer_is_black_opaque(struct wlr_scene_buffer *scene_buffer) {
+ 	return scene_buffer->is_single_pixel_buffer &&
++		!scene_buffer->has_clip_region &&
+ 		scene_buffer->single_pixel_buffer_color[0] == 0 &&
+ 		scene_buffer->single_pixel_buffer_color[1] == 0 &&
+ 		scene_buffer->single_pixel_buffer_color[2] == 0 &&
+@@ -2087,6 +2144,9 @@ static enum scene_direct_scanout_result scene_entry_try_direct_scanout(
+ 	if (buffer->buffer == NULL) {
+ 		return SCANOUT_INELIGIBLE;
+ 	}
++	if (buffer->has_clip_region) {
++		return SCANOUT_INELIGIBLE;
++	}
+ 
+ 	// The native size of the buffer after any transform is applied
+ 	int default_width = buffer->buffer->width;

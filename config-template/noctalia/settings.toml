@@ -1,0 +1,275 @@
+config_version = 12
+
+[bar]
+order = [ "default", "bar", "bar_2", "bar_3" ]
+
+    [bar.bar]
+    background_opacity = 0.59999998658895493
+    capsule = true
+    center = [ "launcher", "taskbar", "heart_spectrum_bridge" ]
+    end = [ "screenshot", "recorder", "weather", "clock", "control-center" ]
+    margin_ends = 440
+    position = "bottom"
+    start = [ "workspaces", "tray" ]
+
+    [bar.bar_2]
+    background_opacity = 0.59999998658895493
+    center = [ "audio_visualizer" ]
+    end = []
+    margin_ends = 200
+    position = "right"
+    start = []
+
+    [bar.bar_3]
+    background_opacity = 0.59999998658895493
+    center = [ "audio_visualizer" ]
+    end = []
+    margin_ends = 200
+    position = "left"
+    start = []
+
+    [bar.default]
+    background_opacity = 0.59999998658895493
+    capsule = true
+    capsule_border = "primary"
+    capsule_fill = "on_primary"
+    capsule_foreground = "secondary"
+    capsule_padding = 8.0
+    capsule_radius = 8
+    capsule_thickness = 0.69999998807907104
+    center = [ "media" ]
+    end = [
+        "tray",
+        "notifications",
+        "clipboard",
+        "network",
+        "bluetooth",
+        "volume",
+        "brightness",
+        "wallpaper",
+        "settings",
+        "session"
+    ]
+    start = [ "launcher", "control-center", "workspaces" ]
+
+[desktop_widgets]
+schema_version = 2
+widget_order = [
+    "desktop-widget-0000000000000001",
+    "desktop-widget-0000000000000003",
+    "desktop-widget-0000000000000004",
+    "desktop-widget-0000000000000002"
+]
+
+    [desktop_widgets.grid]
+    cell_size = 24
+    major_interval = 4
+    visible = true
+
+    [desktop_widgets.widget.desktop-widget-0000000000000001]
+    box_height = 240.0
+    box_width = 640.0
+    cx = 1540.0
+    cy = 900.0
+    output = "@@OUTPUT@@"
+    rotation = 0.0
+    type = "clock"
+
+        [desktop_widgets.widget.desktop-widget-0000000000000001.settings]
+        background = false
+        center_text = false
+        clock_style = "digital"
+        color = "outline"
+        shadow = true
+
+    [desktop_widgets.widget.desktop-widget-0000000000000002]
+    box_height = 216.0
+    box_width = 408.0
+    cx = 520.0
+    cy = 900.0
+    output = "@@OUTPUT@@"
+    rotation = -0.0
+    type = "kiru/lesbian-heart-visualizer:heart"
+
+    [desktop_widgets.widget.desktop-widget-0000000000000003]
+    box_height = 240.0
+    box_width = 144.0
+    cx = 1120.0
+    cy = 900.0
+    output = "@@OUTPUT@@"
+    rotation = 0.0
+    type = "media_player"
+
+        [desktop_widgets.widget.desktop-widget-0000000000000003.settings]
+        background = true
+        color = "primary"
+        hide_when_no_media = true
+        layout = "vertical"
+
+    [desktop_widgets.widget.desktop-widget-0000000000000004]
+    box_height = 160.0
+    box_width = 256.0
+    cx = 1740.0
+    cy = 680.0
+    output = "@@OUTPUT@@"
+    rotation = 0.0
+    type = "weather"
+
+        [desktop_widgets.widget.desktop-widget-0000000000000004.settings]
+        background = false
+        color = "error"
+        show_forecast = false
+
+[dock]
+background_opacity = 0.70999998413026333
+icon_size = 26
+magnification_scale = 1.1500000022351742
+main_axis_padding = 3
+
+[location]
+address = "@@WEATHER_LOCATION@@"
+
+[lockscreen_widgets]
+enabled = false
+schema_version = 2
+widget_order = [ "lockscreen-login-box@HEADLESS-1", "lockscreen-login-box@@@OUTPUT@@" ]
+
+    [lockscreen_widgets.grid]
+    cell_size = 16
+    major_interval = 4
+    visible = true
+
+    [lockscreen_widgets.widget."lockscreen-login-box@@@OUTPUT@@"]
+    box_height = 196.0
+    box_width = 810.0
+    cx = 1720.0
+    cy = 1258.0
+    output = "@@OUTPUT@@"
+    rotation = 0.0
+    type = "login_box"
+
+        [lockscreen_widgets.widget."lockscreen-login-box@@@OUTPUT@@".settings]
+        background_color = "surface_variant"
+        background_opacity = 0.88
+        background_radius = 12.0
+        center_password_text = false
+        input_opacity = 1.0
+        input_radius = 6.0
+        layout = "regular"
+        show_caps_lock = true
+        show_keyboard_layout = true
+        show_login_button = true
+        show_media = true
+        show_session_buttons = true
+        show_unlock_hint = true
+        show_weather = true
+
+    [lockscreen_widgets.widget."lockscreen-login-box@HEADLESS-1"]
+    box_height = 196.0
+    box_width = 810.0
+    cx = 640.0
+    cy = 538.0
+    output = "HEADLESS-1"
+    rotation = 0.0
+    type = "login_box"
+
+        [lockscreen_widgets.widget."lockscreen-login-box@HEADLESS-1".settings]
+        background_color = "surface_variant"
+        background_opacity = 0.88
+        background_radius = 12.0
+        center_password_text = false
+        input_opacity = 1.0
+        input_radius = 6.0
+        layout = "regular"
+        show_caps_lock = true
+        show_keyboard_layout = true
+        show_login_button = true
+        show_media = true
+        show_session_buttons = true
+        show_unlock_hint = true
+        show_weather = true
+
+[plugins]
+enabled = [
+    "8bury/mini-docker",
+    "aristides/udiskie",
+    "kenn/keybind-cheatsheet",
+    "kiru/lesbian-heart-visualizer",
+    "noctalia/screen_recorder"
+]
+
+    [[plugins.source]]
+    kind = "git"
+    location = "https://github.com/noctalia-dev/official-plugins"
+    name = "official"
+
+    [[plugins.source]]
+    kind = "git"
+    location = "https://github.com/noctalia-dev/community-plugins"
+    name = "community"
+
+[shell.launcher]
+app_grid = true
+
+[shell.panel]
+open_near_click_control_center = true
+
+[theme]
+builtin = "Noctalia"
+community_palette = "Cyberpunk"
+custom_palette = "Warehouse-13-Lesbian"
+mode = "dark"
+source = "custom"
+wallpaper_scheme = "vibrant"
+
+    [theme.templates]
+    builtin_ids = [ "gtk3", "gtk4", "kcolorscheme", "qt" ]
+    community_ids = [ "discord", "micro", "steam" ]
+
+[wallpaper]
+directory = "@@HOME@@/.local/share/lesbian-stable/wallpapers"
+directory_light = "@@HOME@@/.local/share/lesbian-stable/wallpapers"
+transition_on_startup = true
+
+    [wallpaper.default]
+    path = "@@HOME@@/.local/share/lesbian-stable/wallpapers/lesbian-stable-wallpaper.png"
+
+    [wallpaper.last]
+    path = "@@HOME@@/.local/share/lesbian-stable/wallpapers/lesbian-stable-wallpaper.png"
+
+    [wallpaper.monitors."@@OUTPUT@@"]
+    path = "@@HOME@@/.local/share/lesbian-stable/wallpapers/lesbian-stable-wallpaper.png"
+
+[widget.audio_visualizer]
+bands = 45
+color_1 = "secondary"
+color_2 = "tertiary"
+width = 1098
+
+[widget.heart_spectrum_bridge]
+audio_spectrum = true
+audio_spectrum_bands = 40
+type = "kiru/lesbian-heart-visualizer:spectrum-bridge"
+
+[widget.control-center]
+color = "on_surface_variant"
+
+[widget.launcher]
+color = "primary"
+glyph = "biohazard-filled"
+
+[widget.network]
+show_label = false
+
+[widget.recorder]
+type = "noctalia/screen_recorder:recorder"
+
+[widget.session]
+color = "on_surface_variant"
+
+[widget.settings]
+color = "primary"
+
+[widget.workspaces]
+label_source = "id"
+show_labels = true

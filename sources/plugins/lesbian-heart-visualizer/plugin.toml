@@ -1,0 +1,36 @@
+id = "kiru/lesbian-heart-visualizer"
+name = "Lesbian Heart Visualizer"
+version = "1.1.0"
+plugin_api = 12
+author = "Kiru"
+license = "GPL-2.0-only"
+dependencies = []
+tags = ["desktop", "audio", "music", "theming", "labwc"]
+icon = "heart"
+description = "Audio-reactive neon heart for the Warehouse-13 Lesbian desktop."
+
+[[widget]]
+id = "spectrum-bridge"
+entry = "bridge.luau"
+
+  [[widget.setting]]
+  key = "audio_spectrum"
+  type = "bool"
+  label_key = "settings.audio_spectrum.label"
+  description_key = "settings.audio_spectrum.description"
+  default = true
+  advanced = true
+
+  [[widget.setting]]
+  key = "audio_spectrum_bands"
+  type = "int"
+  label_key = "settings.audio_spectrum_bands.label"
+  description_key = "settings.audio_spectrum_bands.description"
+  default = 40
+  min = 40
+  max = 40
+  advanced = true
+
+[[desktop_widget]]
+id = "heart"
+entry = "heart.luau"

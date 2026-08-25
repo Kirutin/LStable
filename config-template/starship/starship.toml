@@ -1,0 +1,79 @@
+# Warehouse 13 Lesbian Cyberpunk – Bash prompt
+add_newline = true
+command_timeout = 1000
+
+format = "$username$directory$git_branch$git_status$cmd_duration$status$line_break$character"
+palette = "lesbian_cyberpunk"
+
+[palettes.lesbian_cyberpunk]
+background = "#05020B"
+surface = "#120A19"
+wine = "#520535"
+crimson = "#EE0F54"
+magenta = "#DC2683"
+violet = "#A855F7"
+text = "#F6D9D8"
+muted = "#D9A8BE"
+ink = "#09030B"
+error = "#FF4D6D"
+
+[username]
+show_always = true
+style_user = "bg:crimson fg:ink bold"
+style_root = "bg:error fg:ink bold"
+format = "[](fg:crimson)[ ♥ $user ]($style)[ ](fg:crimson)"
+
+[hostname]
+disabled = true
+
+[directory]
+style = "bg:wine fg:text bold"
+format = "[](fg:wine)[ 󰉋 $path ]($style)[ ](fg:wine)"
+truncation_length = 3
+truncate_to_repo = false
+read_only = " 󰌾"
+read_only_style = "bg:wine fg:error bold"
+
+[git_branch]
+style = "bg:magenta fg:ink bold"
+format = "[](fg:magenta)[ $symbol$branch ]($style)[ ](fg:magenta)"
+symbol = " "
+
+[git_status]
+style = "bg:violet fg:ink bold"
+format = "[](fg:violet)[ $all_status$ahead_behind ]($style)[ ](fg:violet)"
+conflicted = "="
+ahead = "⇡${count}"
+behind = "⇣${count}"
+diverged = "⇕⇡${ahead_count}⇣${behind_count}"
+untracked = "?${count}"
+stashed = "*${count}"
+modified = "!${count}"
+staged = "+${count}"
+renamed = "»${count}"
+deleted = "✘${count}"
+
+[cmd_duration]
+min_time = 1500
+style = "bg:surface fg:muted bold"
+format = "[](fg:surface)[ dauerte $duration ]($style)[ ](fg:surface)"
+
+[status]
+disabled = false
+style = "bg:error fg:ink bold"
+format = "[](fg:error)[ ✘ $status ]($style)[ ](fg:error)"
+
+[line_break]
+disabled = false
+
+[character]
+format = "$symbol"
+success_symbol = "[❯](bold crimson) "
+error_symbol = "[❯](bold error) "
+vimcmd_symbol = "[❮](bold magenta) "
+
+[package]
+disabled = true
+
+[time]
+disabled = true

@@ -1,0 +1,32 @@
+#![enable(implicit_some)]
+#![enable(unwrap_newtypes)]
+#![enable(unwrap_variant_newtypes)]
+(
+    address: "127.0.0.1:6600",
+    password: None,
+    theme: Some("warehouse13"),
+    cache_dir: Some("@@HOME@@/.cache/rmpc"),
+    on_song_change: None,
+    volume_step: 5,
+    max_fps: 30,
+    scrolloff: 4,
+    wrap_navigation: true,
+    enable_mouse: true,
+    scroll_amount: 2,
+    enable_config_hot_reload: true,
+    enable_lyrics_hot_reload: true,
+    status_update_interval_ms: 500,
+    rewind_to_start_sec: Some(5),
+    keep_state_on_song_change: true,
+    reflect_changes_to_playlist: true,
+    select_current_song_on_change: true,
+    ignore_leading_the: true,
+    auto_open_downloads: true,
+    album_art: (
+        method: Auto,
+        max_size_px: (width: 1200, height: 1200),
+        disabled_protocols: ["http://", "https://"],
+        vertical_align: Center,
+        horizontal_align: Center,
+    ),
+)

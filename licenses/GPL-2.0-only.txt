@@ -1,0 +1,8 @@
+GNU General Public License, version 2 only (GPL-2.0-only).
+
+This repository references and redistributes modified Labwc source. The full
+license text is available from the Free Software Foundation:
+https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+
+The corresponding Labwc source bundle, patch set and build scripts remain in
+this repository so the GPL source-correspondence requirement is satisfied.

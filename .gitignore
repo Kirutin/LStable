@@ -1,0 +1,25 @@
+# Local build output and temporary source worktrees
+/build/
+/sources/build/
+/sources/.work/
+*.deb
+*.ddeb
+*.iso
+*.img
+*.qcow2
+
+# The original handoff archive and local staging material
+/Warehouse-13-Debian-Codex-Paket-2026-08-18/
+/Warehouse-13-Debian-Codex-Paket-2026-08-18.zip
+/refind-miril-digital-void-setup-20260731/
+/refind-package-audit/
+/refind_*.deb
+
+# Local application metadata
+/.agents/
+/.codex/
+/.cache/
+*.swp
+*~
+__pycache__/
+*.pyc

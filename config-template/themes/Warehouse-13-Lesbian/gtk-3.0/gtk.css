@@ -1,0 +1,56 @@
+/*
+ * Warehouse 13 Lesbian – GTK3 base theme
+ *
+ * Debian ships Adwaita's dark GTK3 stylesheet as a compiled resource even
+ * when no separate Adwaita-dark theme directory is installed.  Import that
+ * stable base here; Noctalia's generated ~/.config/gtk-3.0/noctalia.css is
+ * loaded afterwards and supplies the current wallpaper palette.
+ */
+@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");
+
+@define-color theme_bg_color #05020b;
+@define-color theme_fg_color #f6d9d8;
+@define-color theme_base_color #05020b;
+@define-color theme_text_color #f6d9d8;
+@define-color theme_selected_bg_color #ee0f54;
+@define-color theme_selected_fg_color #09030b;
+@define-color insensitive_bg_color #120a19;
+@define-color insensitive_fg_color #d9a8be;
+@define-color borders #520535;
+@define-color warning_color #a855f7;
+@define-color error_color #ff4d6d;
+@define-color success_color #dc2683;
+
+/* Adwaita resolves some widget colors while parsing its base stylesheet.
+ * Repeat the visible interaction states so the wallpaper accent remains
+ * crimson instead of falling back to Adwaita blue. */
+.view:selected,
+.view:selected:focus,
+row:selected,
+row:selected:focus,
+treeview.view:selected,
+treeview.view:selected:focus,
+iconview.view:selected,
+iconview.view:selected:focus,
+menuitem:hover,
+modelbutton:hover {
+  background-color: #ee0f54;
+  color: #09030b;
+}
+
+entry:focus,
+button:focus,
+combobox:focus,
+spinbutton:focus {
+  border-color: #ee0f54;
+  outline-color: #ee0f54;
+}
+
+progressbar progress,
+scale highlight,
+switch:checked,
+check:checked,
+radio:checked {
+  background-color: #ee0f54;
+  color: #09030b;
+}

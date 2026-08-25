@@ -1,0 +1,6 @@
+MIT License
+
+Copyright (c) noctalia-dev
+
+See the upstream Noctalia Greeter repository for the canonical license text:
+https://github.com/noctalia-dev/noctalia-greeter/blob/main/LICENSE

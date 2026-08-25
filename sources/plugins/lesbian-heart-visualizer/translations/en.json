@@ -1,0 +1,6 @@
+{
+  "settings.audio_spectrum.label": "Native audio spectrum",
+  "settings.audio_spectrum.description": "Keeps Noctalia's native PipeWire spectrum active for the desktop heart.",
+  "settings.audio_spectrum_bands.label": "Spectrum bands",
+  "settings.audio_spectrum_bands.description": "The heart uses exactly 40 frequency bands."
+}
