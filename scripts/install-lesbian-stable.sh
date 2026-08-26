@@ -89,7 +89,7 @@ echo 'Lesbian Stable – Installationsplan'
 echo "  Debian: ${PRETTY_NAME:-${ID:-debian}}"
 echo "  Architektur: $arch"
 echo "  Labwc: $LABWC_REF (style-only, ohne HyFlair/CyLab/Tiling/Overview)"
-echo "  Noctalia Greeter: aktiviert die Session labwc-lesbian-stable"
+echo '  Noctalia Greeter: aktiviert die Session „labwc - lesbian singularity x7“'
 echo '  Qt/GTK, Kitty, Firefox, Dolphin/Kate/Gwenview, Audio und Terminaltools'
 if ((refind)); then
   echo '  rEFInd: ausdrücklich angefordert (EFI-Prüfungen folgen)'
@@ -144,14 +144,17 @@ if ((build == 0)); then
 fi
 
 echo
-echo '[0/6] Bootstrap-Werkzeuge für signierte APT-Quelle bereitstellen'
+echo '[0/7] Bootstrap-Werkzeuge für signierte APT-Quellen bereitstellen'
 as_root apt-get update
-as_root apt-get install -y --no-install-recommends ca-certificates wget
+as_root apt-get install -y --no-install-recommends ca-certificates wget file
 
-echo '[1/6] Noctalia-Quelle für Debian Trixie einrichten'
+echo '[1/7] Noctalia-Quelle für Debian Trixie einrichten'
 "$ROOT_DIR/scripts/02-setup-noctalia-repo.sh" --apply
 
-echo '[2/6] APT aktualisieren und Laufzeitpakete installieren'
+echo '[2/7] Offizielle Yazi-Stable-Quelle einrichten'
+"$ROOT_DIR/scripts/02-setup-yazi-repo.sh" --apply
+
+echo '[3/7] APT aktualisieren und Laufzeitpakete installieren'
 as_root apt-get update
 missing=()
 for package in "${runtime_apt[@]}"; do
@@ -165,20 +168,20 @@ fi
 as_root apt-get install -y --no-install-recommends "${runtime_apt[@]}"
 
 if ((build)); then
-  echo '[3/6] Build-Abhängigkeiten installieren und lokale Pakete bauen'
+  echo '[4/7] Build-Abhängigkeiten installieren und lokale Pakete bauen'
   "$ROOT_DIR/scripts/02-install-dependencies.sh" --apply build
   WAREHOUSE_REUSE_WORK=1 "$ROOT_DIR/scripts/03-build-packages.sh"
   labwc_deb="$(latest_match "$local_labwc")"
   rmpc_deb="$(latest_match "$local_rmpc")"
 fi
 
-echo '[4/6] Lesbian-Labwc- und rmpc-Pakete installieren'
+echo '[5/7] Lesbian-Labwc- und rmpc-Pakete installieren'
 as_root apt-get install -y --no-install-recommends "$labwc_deb" "$rmpc_deb"
 
-echo '[5/6] Benutzerprofil mit Backup ausrollen'
+echo '[6/7] Benutzerprofil mit Backup ausrollen'
 "$ROOT_DIR/scripts/deploy-lesbian-stable-config.sh" --apply
 
-echo '[6/6] Noctalia Greeter als Display Manager einrichten'
+echo '[7/7] Noctalia Greeter als Display Manager einrichten'
 as_root "$ROOT_DIR/scripts/07-install-noctalia-greeter.sh" --apply
 
 if ((refind)); then
