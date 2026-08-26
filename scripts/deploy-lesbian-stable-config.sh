@@ -32,8 +32,11 @@ done
 }
 
 for required in \
-  "$TEMPLATE_DIR/lesbian-stable/labwc/rc.xml" \
-  "$TEMPLATE_DIR/lesbian-stable/labwc/menu.xml" \
+  "$TEMPLATE_DIR/labwc/rc.xml" \
+  "$TEMPLATE_DIR/labwc/menu.xml" \
+  "$TEMPLATE_DIR/labwc/environment" \
+  "$TEMPLATE_DIR/labwc/autostart" \
+  "$TEMPLATE_DIR/labwc/keybindings.md" \
   "$TEMPLATE_DIR/noctalia/settings.toml" \
   "$TEMPLATE_DIR/noctalia/palettes/Warehouse-13-Lesbian.json" \
   "$ROOT_DIR/assets/warehouse-13-lesbian-cyberpunk-wallpaper.png" \
@@ -97,7 +100,7 @@ backup_and_install() {
   install -D -m "$mode_bits" "$source" "$target"
 }
 
-render "$TEMPLATE_DIR/lesbian-stable/labwc/menu.xml" "$render_dir/labwc/menu.xml"
+render "$TEMPLATE_DIR/labwc/menu.xml" "$render_dir/labwc/menu.xml"
 render "$TEMPLATE_DIR/noctalia/settings.toml" "$render_dir/noctalia/settings.toml"
 render "$TEMPLATE_DIR/fastfetch/config.jsonc" "$render_dir/fastfetch/config.jsonc"
 render "$TEMPLATE_DIR/mpd/mpd.conf" "$render_dir/mpd/mpd.conf"
@@ -108,9 +111,9 @@ mkdir -p "$HOME/Musik" "$HOME/Musik/Lyrics" \
   "$HOME/.local/share/mpd/playlists" "$HOME/.local/state/mpd" "$HOME/.cache/rmpc"
 
 for name in rc.xml environment keybindings.md; do
-  backup_and_install "$TEMPLATE_DIR/lesbian-stable/labwc/$name" "$HOME/.config/labwc/$name"
+  backup_and_install "$TEMPLATE_DIR/labwc/$name" "$HOME/.config/labwc/$name"
 done
-backup_and_install "$TEMPLATE_DIR/lesbian-stable/labwc/autostart" "$HOME/.config/labwc/autostart" 0755
+backup_and_install "$TEMPLATE_DIR/labwc/autostart" "$HOME/.config/labwc/autostart" 0755
 backup_and_install "$render_dir/labwc/menu.xml" "$HOME/.config/labwc/menu.xml"
 for name in applications.py recent-files.py; do
   backup_and_install "$TEMPLATE_DIR/labwc/pipe-menus/$name" "$HOME/.config/labwc/pipe-menus/$name" 0755
@@ -195,4 +198,4 @@ fi
 
 echo
 echo "Lesbian Stable Benutzerprofil installiert. Sicherung: $backup_root"
-echo 'Die Labwc-Session heißt labwc-lesbian-stable.'
+echo 'Die Labwc-Session heißt „labwc - lesbian singularity x7“.'
