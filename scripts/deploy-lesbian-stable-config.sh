@@ -178,7 +178,7 @@ if ! grep -Fqx "$starship_source" "$HOME/.bashrc" 2>/dev/null; then
   printf '\n%s\n%s\n' '# Lesbian Stable Starship prompt' "$starship_source" >> "$HOME/.bashrc"
 fi
 
-if command -v xdg-mime >/dev/null 2>&1; then
+if command -v xdg-mime >/dev/null 2>&1 && command -v qtpaths >/dev/null 2>&1; then
   for mime in image/avif image/bmp image/gif image/heif image/jpeg image/jxl image/png image/svg+xml image/tiff image/webp; do
     xdg-mime default org.kde.gwenview.desktop "$mime" || true
   done
