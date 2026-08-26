@@ -89,6 +89,7 @@ echo 'Lesbian Stable – Installationsplan'
 echo "  Debian: ${PRETTY_NAME:-${ID:-debian}}"
 echo "  Architektur: $arch"
 echo "  Labwc: $LABWC_REF (style-only, ohne HyFlair/CyLab/Tiling/Overview)"
+echo '  Noctalia + Greeter: gezielt aus Trixie-Backports'
 echo '  Noctalia Greeter: aktiviert die Session „labwc - lesbian singularity x7“'
 echo '  Qt/GTK, Kitty, Firefox, Dolphin/Kate/Gwenview, Audio und Terminaltools'
 if ((refind)); then
@@ -99,12 +100,17 @@ fi
 
 runtime_apt=()
 for package in "${LESBIAN_STABLE_RUNTIME_PACKAGES[@]}"; do
-  [[ $package == lesbian-labwc ]] || runtime_apt+=("$package")
+  case "$package" in
+    lesbian-labwc|noctalia|noctalia-greeter) ;;
+    *) runtime_apt+=("$package") ;;
+  esac
 done
 
 echo
 echo 'Laufzeitpakete:'
 printf '  %s\n' "${runtime_apt[@]}"
+echo '  noctalia (Trixie-Backports)'
+echo '  noctalia-greeter (Trixie-Backports)'
 if ((build)); then
   echo
   echo 'Build: lokale Bundles + gepinnte Patches für Labwc und rmpc'
@@ -144,44 +150,53 @@ if ((build == 0)); then
 fi
 
 echo
-echo '[0/7] Bootstrap-Werkzeuge für signierte APT-Quellen bereitstellen'
+echo '[0/8] Bootstrap-Werkzeuge für signierte APT-Quellen bereitstellen'
 as_root apt-get update
 as_root apt-get install -y --no-install-recommends ca-certificates wget file
 
-echo '[1/7] Noctalia-Quelle für Debian Trixie einrichten'
+echo '[1/8] Noctalia-Quelle für Debian Trixie einrichten'
 "$ROOT_DIR/scripts/02-setup-noctalia-repo.sh" --apply
 
-echo '[2/7] Offizielle Yazi-Stable-Quelle einrichten'
+echo '[2/8] Offizielle Yazi-Stable-Quelle einrichten'
 "$ROOT_DIR/scripts/02-setup-yazi-repo.sh" --apply
 
-echo '[3/7] APT aktualisieren und Laufzeitpakete installieren'
+echo '[3/8] Noctalia und Greeter aus Trixie-Backports installieren'
 as_root apt-get update
+for package in noctalia noctalia-greeter; do
+  apt-cache show "$package" >/dev/null 2>&1 || {
+    echo "Fehlendes Noctalia-Paket: $package" >&2
+    exit 1
+  }
+done
+as_root apt-get -t trixie-backports install -y --no-install-recommends noctalia noctalia-greeter
+
+echo '[4/8] Normale Laufzeitpakete installieren'
 missing=()
 for package in "${runtime_apt[@]}"; do
   apt-cache show "$package" >/dev/null 2>&1 || missing+=("$package")
 done
 if ((${#missing[@]})); then
   printf 'Fehlende Paketnamen: %s\n' "${missing[*]}" >&2
-  echo 'Abbruch ohne Teilinstallation: erst Paketnamen/Quelle für dieses Debian-System prüfen.' >&2
+  echo 'Abbruch ohne weitere Teilinstallation: erst Paketnamen/Quelle für dieses Debian-System prüfen.' >&2
   exit 1
 fi
 as_root apt-get install -y --no-install-recommends "${runtime_apt[@]}"
 
 if ((build)); then
-  echo '[4/7] Build-Abhängigkeiten installieren und lokale Pakete bauen'
+  echo '[5/8] Build-Abhängigkeiten installieren und lokale Pakete bauen'
   "$ROOT_DIR/scripts/02-install-dependencies.sh" --apply build
   WAREHOUSE_REUSE_WORK=1 "$ROOT_DIR/scripts/03-build-packages.sh"
   labwc_deb="$(latest_match "$local_labwc")"
   rmpc_deb="$(latest_match "$local_rmpc")"
 fi
 
-echo '[5/7] Lesbian-Labwc- und rmpc-Pakete installieren'
+echo '[6/8] Lesbian-Labwc- und rmpc-Pakete installieren'
 as_root apt-get install -y --no-install-recommends "$labwc_deb" "$rmpc_deb"
 
-echo '[6/7] Benutzerprofil mit Backup ausrollen'
+echo '[7/8] Benutzerprofil mit Backup ausrollen'
 "$ROOT_DIR/scripts/deploy-lesbian-stable-config.sh" --apply
 
-echo '[7/7] Noctalia Greeter als Display Manager einrichten'
+echo '[8/8] Noctalia Greeter als Display Manager einrichten'
 as_root "$ROOT_DIR/scripts/07-install-noctalia-greeter.sh" --apply
 
 if ((refind)); then
