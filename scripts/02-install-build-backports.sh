@@ -28,8 +28,10 @@ as_root() {
     "$@"
   elif command -v pkexec >/dev/null 2>&1 && [[ -n ${DISPLAY:-}${WAYLAND_DISPLAY:-} ]]; then
     pkexec "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
   else
-    echo 'Polkit ist nicht verfuegbar.' >&2
+    echo 'Weder Polkit noch sudo ist fuer den privilegierten Schritt verfuegbar.' >&2
     return 1
   fi
 }
