@@ -18,7 +18,7 @@ jobs:
       - name: Install check tools
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: Shell syntax
-        run: bash -n scripts/*.sh sources/scripts/*.sh config-template/lesbian-stable/labwc/autostart
+        run: bash -n scripts/*.sh sources/scripts/*.sh config-template/labwc/autostart
       - name: Shellcheck maintained entrypoints
         run: shellcheck -x scripts/install-lesbian-stable.sh scripts/deploy-lesbian-stable-config.sh scripts/07-install-noctalia-greeter.sh sources/scripts/build-lesbian-labwc-deb.sh
       - name: Parse configuration
@@ -29,12 +29,12 @@ jobs:
           import xml.etree.ElementTree as ET
           for path in Path('config-template').rglob('*.toml'):
               tomllib.loads(path.read_text())
-          for path in Path('config-template/lesbian-stable').rglob('*.xml'):
+          for path in Path('config-template/labwc').glob('*.xml'):
               ET.parse(path)
           PY
       - name: Check style-only boundary
         run: |
           test ! -d config-template/hyflair
-          ! rg -n -i 'hyflair|cylab|overview|<regions|data-owner="hyflair' config-template/lesbian-stable sources/packaging/patches/labwc-lesbian
+          ! rg -n -i 'hyflair|cylab|overview|<regions|data-owner="hyflair' config-template/labwc sources/packaging/patches/labwc-lesbian
       - name: Verify manifest
         run: sha256sum -c MANIFEST.sha256
