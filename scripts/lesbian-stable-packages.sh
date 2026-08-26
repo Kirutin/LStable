@@ -5,7 +5,7 @@
 
 LESBIAN_STABLE_RUNTIME_PACKAGES=(
   ca-certificates wget
-  greetd noctalia-greeter accountsservice
+  greetd noctalia noctalia-greeter accountsservice
   lesbian-labwc kitty xwayland wlr-randr
   dbus-user-session qt5ct qt6ct qt6-wayland qt6-svg-plugins
   polkit-kde-agent-1 breeze breeze-gtk-theme breeze-icon-theme
