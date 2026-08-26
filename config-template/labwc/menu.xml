@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<openbox_menu>
+  <menu id="root-menu" label="">
+    <separator label="Lesbian Stable" />
+    <item label="Terminal" icon="utilities-terminal">
+      <action name="Execute" command="kitty" />
+    </item>
+    <item label="Dateien" icon="system-file-manager">
+      <action name="Execute" command="dolphin" />
+    </item>
+    <item label="Firefox" icon="firefox-esr">
+      <action name="Execute" command="firefox-esr" />
+    </item>
+    <separator />
+    <menu id="applications" label="Anwendungen" icon="view-app-grid-symbolic" execute="$HOME/.config/labwc/pipe-menus/applications.py" />
+    <menu id="recent-files" label="Zuletzt verwendet" icon="document-open-recent" execute="$HOME/.config/labwc/pipe-menus/recent-files.py" />
+    <separator />
+    <item label="Neu laden" icon="view-refresh">
+      <action name="Reconfigure" />
+    </item>
+    <item label="Abmelden" icon="system-log-out">
+      <action name="Exit" />
+    </item>
+  </menu>
+</openbox_menu>
