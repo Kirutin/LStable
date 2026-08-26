@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Session-wide services are started by /usr/bin/labwc-lesbian-stable-autostart
+# from the lesbian-labwc package. Keep this file intentionally small so that
+# a user can add local startup commands without duplicating Noctalia or Polkit.
+exit 0
