@@ -1,0 +1,1610 @@
+diff --git a/docs/labwc-config.5.scd b/docs/labwc-config.5.scd
+index cf142cf..c6d4daf 100644
+--- a/docs/labwc-config.5.scd
++++ b/docs/labwc-config.5.scd
+@@ -657,11 +657,14 @@ extending outward from the snapped edge.
+ 	Show the window title in the titlebar. Default is yes.
+ 
+ *<theme><cornerRadius>*
+-	The radius of server side decoration top corners. Default is 8.
++	The radius of floating window corners. This clips client content and rounds
++	server side borders. Maximized and tiled windows remain square. Default is 8.
+ 
+ *<theme><keepBorder>* [yes|no]
+-	Even when disabling server side decorations via ToggleDecorations,
+-	keep a small border (and resize area) around the window. Default is yes.
++	Keep a small border (and resize area) when a client draws its own
++	decorations or server side decorations are disabled via ToggleDecorations.
++	An explicit *serverDecoration="no"* window rule remains borderless.
++	Default is yes.
+ 
+ *<theme><maximizedDecoration>* [titlebar|none]
+ 	Specify how server side decorations are shown for maximized windows.
+diff --git a/docs/labwc-theme.5.scd b/docs/labwc-theme.5.scd
+index dce48bd..a9275b9 100644
+--- a/docs/labwc-theme.5.scd
++++ b/docs/labwc-theme.5.scd
+@@ -123,10 +123,25 @@ window.*.title.bg.colorTo.splitTo: #557485
+ 	Default is 0.
+ 
+ *window.active.border.color*
+-	Border color of active window. Default is #aaaaaa.
++	Border color of the active window. One to three comma-separated colors
++	may be specified. Multiple colors are rendered as a continuous diagonal
++	gradient around the complete window outline. Default is #aaaaaa.
+ 
+ *window.inactive.border.color*
+-	Border color of inactive window. Default is #aaaaaa.
++	Border color of inactive windows. Accepts the same one-to-three-color
++	format as *window.active.border.color*. Default is #aaaaaa.
++
++*window.active.opacity*
++	Opacity of the focused window, including its server-side decoration.
++	Valid values range from 0.0 (fully transparent) to 1.0 (fully opaque).
++	The compositor opacity is multiplied with any opacity requested by the
++	Wayland client. Default is 1.0.
++
++*window.inactive.opacity*
++	Opacity of unfocused windows, including their server-side decorations.
++	Valid values range from 0.0 (fully transparent) to 1.0 (fully opaque).
++	The compositor opacity is multiplied with any opacity requested by the
++	Wayland client. Default is 1.0.
+ 
+ *window.active.indicator.toggled-keybind.color*
+ 	Status indicator for the ToggleKeybinds action. Can be set to the same
+@@ -257,6 +272,9 @@ all are supported.
+ *menu.border.width*
+ 	Border width of menus in pixels. Inherits *border.width* if not set.
+ 
++*menu.corner-radius*
++	Radius of menu corners in pixels. Default is 0 (square corners).
++
+ *menu.border.color*
+ 	Border color of menus. Inherits *window.active.border.color* if not set.
+ 
+@@ -314,6 +332,9 @@ all are supported.
+ *osd.border.width*
+ 	Border width of on-screen-display. Inherits *border.width* if not set.
+ 
++*osd.cornerRadius*
++	Corner radius of on-screen-display in pixels. Default is 0.
++
+ *osd.label.text.color*
+ 	Text color of on-screen-display. Inherits
+ 	*window.active.label.text.color* if not set.
+@@ -415,6 +436,9 @@ all are supported.
+ *osd.workspace-switcher.boxes.border.width*
+ 	Border width of boxes in workspace switcher in pixels. Default is 2.
+ 
++*osd.workspace-switcher.boxes.cornerRadius*
++	Corner radius of boxes in workspace switcher in pixels. Default is 0.
++
+ *snapping.overlay.region.bg.enabled* [yes|no]
+ 	Show a filled rectangle as an overlay when a window is snapped to a
+ 	region. Default is yes for hardware-based renderers and no for
+diff --git a/docs/themerc b/docs/themerc
+index 83ea726..b101d36 100644
+--- a/docs/themerc
++++ b/docs/themerc
+@@ -16,8 +16,11 @@ window.titlebar.padding.width: 0
+ window.titlebar.padding.height: 0
+ 
+ # window border
++# One to three comma-separated colors create a diagonal border gradient.
+ window.active.border.color: #aaaaaa
+ window.inactive.border.color: #aaaaaa
++window.active.opacity: 1.0
++window.inactive.opacity: 1.0
+ 
+ # ToggleKeybinds status indicator
+ window.active.indicator.toggled-keybind.color: #ff0000
+@@ -88,6 +91,7 @@ menu.title.text.justify: Center
+ osd.bg.color: #e1dedb
+ osd.border.color: #000000
+ osd.border.width: 1
++osd.cornerRadius: 0
+ osd.label.text.color: #000000
+ 
+ # width can be set as percent (of screen width)
+@@ -119,6 +123,7 @@ osd.window-switcher.preview.border.color: #dddda6,#000000,#dddda6
+ osd.workspace-switcher.boxes.width: 20
+ osd.workspace-switcher.boxes.height: 20
+ osd.workspace-switcher.boxes.border.width: 2
++osd.workspace-switcher.boxes.cornerRadius: 0
+ 
+ # Default values for following options change depending on the rendering
+ # backend. For software-based renderers, *.bg.enabled is "no" and
+diff --git a/include/ssd-internal.h b/include/ssd-internal.h
+index 600b907..8adbcbd 100644
+--- a/include/ssd-internal.h
++++ b/include/ssd-internal.h
+@@ -114,7 +114,7 @@ struct ssd {
+ 		struct wlr_scene_tree *tree;
+ 		struct ssd_border_subtree {
+ 			struct wlr_scene_tree *tree;
+-			struct wlr_scene_rect *top, *bottom, *left, *right;
++			struct wlr_scene_buffer *top, *bottom, *left, *right;
+ 		} subtrees[2]; /* indexed by enum ssd_active_state */
+ 	} border;
+ 
+diff --git a/include/theme.h b/include/theme.h
+index 2fb499a..77524a1 100644
+--- a/include/theme.h
++++ b/include/theme.h
+@@ -94,8 +94,11 @@ struct theme {
+ 		float button_colors[LAB_NODE_BUTTON_LAST + 1][4];
+ 
+ 		float border_color[4];
++		float border_colors[3][4];
++		int border_color_count;
+ 		float toggled_keybinds_color[4];
+ 		float label_text_color[4];
++		float opacity;
+ 
+ 		/* window drop-shadows */
+ 		int shadow_size;
+@@ -126,6 +129,10 @@ struct theme {
+ 
+ 		struct lab_data_buffer *corner_top_left_normal;
+ 		struct lab_data_buffer *corner_top_right_normal;
++		struct lab_data_buffer *corner_top_left_border;
++		struct lab_data_buffer *corner_top_right_border;
++		struct lab_data_buffer *corner_bottom_left_normal;
++		struct lab_data_buffer *corner_bottom_right_normal;
+ 
+ 		struct lab_data_buffer *shadow_corner_top;
+ 		struct lab_data_buffer *shadow_corner_bottom;
+@@ -141,6 +148,7 @@ struct theme {
+ 	int menu_min_width;
+ 	int menu_max_width;
+ 	int menu_border_width;
++	int menu_corner_radius;
+ 	float menu_border_color[4];
+ 
+ 	int menu_items_padding_x;
+@@ -160,6 +168,7 @@ struct theme {
+ 	float menu_title_text_color[4];
+ 
+ 	int osd_border_width;
++	int osd_corner_radius;
+ 
+ 	float osd_bg_color[4];
+ 	float osd_border_color[4];
+@@ -204,6 +213,7 @@ struct theme {
+ 	int osd_workspace_switcher_boxes_width;
+ 	int osd_workspace_switcher_boxes_height;
+ 	int osd_workspace_switcher_boxes_border_width;
++	int osd_workspace_switcher_boxes_corner_radius;
+ 
+ 	struct theme_snapping_overlay
+ 		snapping_overlay_region, snapping_overlay_edge;
+diff --git a/include/view.h b/include/view.h
+index 46943ab..257f4c1 100644
+--- a/include/view.h
++++ b/include/view.h
+@@ -557,6 +557,7 @@ void view_maximize(struct view *view, enum view_axis axis);
+ void view_set_fullscreen(struct view *view, bool fullscreen);
+ void view_toggle_maximize(struct view *view, enum view_axis axis);
+ bool view_wants_decorations(struct view *view);
++enum lab_ssd_mode view_client_decoration_mode(struct view *view);
+ void view_toggle_decorations(struct view *view);
+ 
+ void view_set_layer(struct view *view, enum view_layer layer);
+diff --git a/src/decorations/kde-deco.c b/src/decorations/kde-deco.c
+index 9b3a55f..ecc6fd4 100644
+--- a/src/decorations/kde-deco.c
++++ b/src/decorations/kde-deco.c
+@@ -57,7 +57,8 @@ handle_mode(struct wl_listener *listener, void *data)
+ 	if (kde_deco->view->ssd_preference == LAB_SSD_PREF_SERVER) {
+ 		view_set_ssd_mode(kde_deco->view, LAB_SSD_MODE_FULL);
+ 	} else {
+-		view_set_ssd_mode(kde_deco->view, LAB_SSD_MODE_NONE);
++		view_set_ssd_mode(kde_deco->view,
++			view_client_decoration_mode(kde_deco->view));
+ 	}
+ }
+ 
+diff --git a/src/decorations/xdg-deco.c b/src/decorations/xdg-deco.c
+index e195e02..c223604 100644
+--- a/src/decorations/xdg-deco.c
++++ b/src/decorations/xdg-deco.c
+@@ -85,7 +85,8 @@ xdg_deco_request_mode(struct wl_listener *listener, void *data)
+ 	if (client_mode == WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE) {
+ 		view_set_ssd_mode(xdg_deco->view, LAB_SSD_MODE_FULL);
+ 	} else {
+-		view_set_ssd_mode(xdg_deco->view, LAB_SSD_MODE_NONE);
++		view_set_ssd_mode(xdg_deco->view,
++			view_client_decoration_mode(xdg_deco->view));
+ 	}
+ }
+ 
+diff --git a/src/menu/menu.c b/src/menu/menu.c
+index c0e93c5..5f9da26 100644
+--- a/src/menu/menu.c
++++ b/src/menu/menu.c
+@@ -2,8 +2,10 @@
+ #define _POSIX_C_SOURCE 200809L
+ #include "menu/menu.h"
+ #include <assert.h>
++#include <cairo.h>
+ #include <ctype.h>
+ #include <libxml/parser.h>
++#include <math.h>
+ #include <signal.h>
+ #include <stdbool.h>
+ #include <stdlib.h>
+@@ -14,6 +16,7 @@
+ #include <wlr/types/wlr_xdg_shell.h>
+ #include <wlr/util/log.h>
+ #include "action.h"
++#include "buffer.h"
+ #include "common/buf.h"
+ #include "common/dir.h"
+ #include "common/font.h"
+@@ -30,6 +33,7 @@
+ #include "output.h"
+ #include "scaled-buffer/scaled-font-buffer.h"
+ #include "scaled-buffer/scaled-icon-buffer.h"
++#include "scaled-buffer/scaled-buffer.h"
+ #include "theme.h"
+ #include "translate.h"
+ #include "view.h"
+@@ -43,6 +47,198 @@
+ static bool waiting_for_pipe_menu;
+ static struct menuitem *selected_item;
+ 
++struct menu_background {
++	int width;
++	int height;
++	int radius;
++	int border_width;
++	bool round_top;
++	bool round_bottom;
++	float color[4];
++};
++
++static void
++set_cairo_color(cairo_t *cairo, const float color[4])
++{
++	double alpha = color[3];
++	cairo_set_source_rgba(cairo,
++		alpha > 0.0 ? color[0] / alpha : 0.0,
++		alpha > 0.0 ? color[1] / alpha : 0.0,
++		alpha > 0.0 ? color[2] / alpha : 0.0,
++		alpha);
++}
++
++static void
++menu_rounded_path(cairo_t *cairo, int width, int height, int radius,
++		bool round_top, bool round_bottom)
++{
++	double r = MIN(radius, MIN(width, height) / 2.0);
++	const double half_pi = acos(-1.0) / 2.0;
++
++	cairo_new_sub_path(cairo);
++	cairo_move_to(cairo, round_top ? r : 0, 0);
++	cairo_line_to(cairo, round_top ? width - r : width, 0);
++	if (round_top) {
++		cairo_arc(cairo, width - r, r, r, -half_pi, 0);
++	}
++	cairo_line_to(cairo, width, round_bottom ? height - r : height);
++	if (round_bottom) {
++		cairo_arc(cairo, width - r, height - r, r, 0, half_pi);
++	}
++	cairo_line_to(cairo, round_bottom ? r : 0, height);
++	if (round_bottom) {
++		cairo_arc(cairo, r, height - r, r, half_pi, 2 * half_pi);
++	}
++	cairo_line_to(cairo, 0, round_top ? r : 0);
++	if (round_top) {
++		cairo_arc(cairo, r, r, r, 2 * half_pi, 3 * half_pi);
++	}
++	cairo_close_path(cairo);
++}
++
++static struct lab_data_buffer *
++menu_background_render(struct scaled_buffer *scaled, double scale)
++{
++	struct menu_background *bg = scaled->data;
++	struct lab_data_buffer *buffer = buffer_create_cairo(
++		bg->width, bg->height, scale);
++	if (!buffer) {
++		return NULL;
++	}
++
++	cairo_t *cairo = cairo_create(buffer->surface);
++	cairo_set_operator(cairo, CAIRO_OPERATOR_CLEAR);
++	cairo_paint(cairo);
++	cairo_set_operator(cairo, CAIRO_OPERATOR_SOURCE);
++	cairo_set_antialias(cairo, CAIRO_ANTIALIAS_BEST);
++	set_cairo_color(cairo, bg->color);
++	menu_rounded_path(cairo, bg->width, bg->height, bg->radius,
++		bg->round_top, bg->round_bottom);
++	cairo_fill(cairo);
++
++	if (bg->border_width > 0) {
++		int inset = bg->border_width;
++		int inner_width = bg->width - 2 * inset;
++		int inner_height = bg->height - 2 * inset;
++		if (inner_width > 0 && inner_height > 0) {
++			cairo_set_operator(cairo, CAIRO_OPERATOR_CLEAR);
++			cairo_translate(cairo, inset, inset);
++			menu_rounded_path(cairo, inner_width, inner_height,
++				MAX(bg->radius - inset, 0), true, true);
++			cairo_fill(cairo);
++		}
++	}
++
++	cairo_surface_flush(buffer->surface);
++	cairo_destroy(cairo);
++	return buffer;
++}
++
++static void
++menu_background_destroy(struct scaled_buffer *scaled)
++{
++	free(scaled->data);
++}
++
++static bool
++menu_background_equal(struct scaled_buffer *a, struct scaled_buffer *b)
++{
++	struct menu_background *bg_a = a->data;
++	struct menu_background *bg_b = b->data;
++	return bg_a->width == bg_b->width
++		&& bg_a->height == bg_b->height
++		&& bg_a->radius == bg_b->radius
++		&& bg_a->border_width == bg_b->border_width
++		&& bg_a->round_top == bg_b->round_top
++		&& bg_a->round_bottom == bg_b->round_bottom
++		&& !memcmp(bg_a->color, bg_b->color, sizeof(bg_a->color));
++}
++
++static const struct scaled_buffer_impl menu_background_impl = {
++	.create_buffer = menu_background_render,
++	.destroy = menu_background_destroy,
++	.equal = menu_background_equal,
++};
++
++static bool
++menu_background_accepts_input(struct wlr_scene_buffer *scene_buffer,
++		double *sx, double *sy)
++{
++	struct wlr_buffer *buffer = scene_buffer->buffer;
++	if (!buffer || scene_buffer->dst_width <= 0
++			|| scene_buffer->dst_height <= 0) {
++		return false;
++	}
++
++	int x = floor(*sx * buffer->width / scene_buffer->dst_width);
++	int y = floor(*sy * buffer->height / scene_buffer->dst_height);
++	if (x < 0 || y < 0 || x >= buffer->width || y >= buffer->height) {
++		return false;
++	}
++
++	void *data;
++	uint32_t format;
++	size_t stride;
++	if (!wlr_buffer_begin_data_ptr_access(buffer,
++			WLR_BUFFER_DATA_PTR_ACCESS_READ, &data, &format, &stride)) {
++		return true;
++	}
++	(void)format;
++	uint8_t alpha = ((uint8_t *)data)[y * stride + x * 4 + 3];
++	wlr_buffer_end_data_ptr_access(buffer);
++	return alpha > 0;
++}
++
++static struct wlr_scene_node *
++menu_background_create(struct wlr_scene_tree *parent, int width, int height,
++		const float color[4], int radius, int border_width,
++		bool round_top, bool round_bottom)
++{
++	struct scaled_buffer *scaled = scaled_buffer_create(
++		parent, &menu_background_impl, true);
++	struct menu_background *bg = znew(*bg);
++	bg->width = width;
++	bg->height = height;
++	bg->radius = radius;
++	bg->border_width = border_width;
++	bg->round_top = round_top;
++	bg->round_bottom = round_bottom;
++	memcpy(bg->color, color, sizeof(bg->color));
++	scaled->data = bg;
++	scaled->scene_buffer->point_accepts_input = menu_background_accepts_input;
++	scaled_buffer_request_update(scaled, width, height);
++	return &scaled->scene_buffer->node;
++}
++
++static bool
++item_is_first(const struct menuitem *item)
++{
++	return item->link.prev == &item->parent->menuitems;
++}
++
++static bool
++item_is_last(const struct menuitem *item)
++{
++	return item->link.next == &item->parent->menuitems;
++}
++
++static void
++item_background_create(struct menuitem *item, struct wlr_scene_tree *parent,
++		int width, int height, float color[4])
++{
++	struct theme *theme = rc.theme;
++	int radius = MAX(theme->menu_corner_radius - theme->menu_border_width, 0);
++	bool round_top = radius > 0 && item_is_first(item);
++	bool round_bottom = radius > 0 && item_is_last(item);
++
++	if (round_top || round_bottom) {
++		menu_background_create(parent, width, height, color, radius, 0,
++			round_top, round_bottom);
++	} else {
++		lab_wlr_scene_rect_create(parent, width, height, color);
++	}
++}
++
+ struct menu_pipe_context {
+ 	struct wlr_box anchor_rect;
+ 	struct menu *pipemenu;
+@@ -278,7 +474,8 @@ item_create_scene_for_state(struct menuitem *item, float *text_color,
+ 	}
+ 
+ 	/* Create background */
+-	lab_wlr_scene_rect_create(tree, bg_width, theme->menu_item_height, bg_color);
++	item_background_create(item, tree, bg_width,
++		theme->menu_item_height, bg_color);
+ 
+ 	/* Create icon */
+ 	bool show_app_icon = !strcmp(item->parent->id, "client-list-combined-menu")
+@@ -401,8 +598,8 @@ separator_create_scene(struct menuitem *menuitem, int *item_y)
+ 	}
+ 
+ 	/* Item background nodes */
+-	lab_wlr_scene_rect_create(menuitem->normal_tree, bg_width, bg_height,
+-		theme->menu_items_bg_color);
++	item_background_create(menuitem, menuitem->normal_tree,
++		bg_width, bg_height, theme->menu_items_bg_color);
+ 
+ 	/* Draw separator line */
+ 	struct wlr_scene_rect *line_rect = lab_wlr_scene_rect_create(
+@@ -447,7 +644,7 @@ title_create_scene(struct menuitem *menuitem, int *item_y)
+ 	}
+ 
+ 	/* Background */
+-	lab_wlr_scene_rect_create(menuitem->normal_tree,
++	item_background_create(menuitem, menuitem->normal_tree,
+ 		bg_width, theme->menu_header_height, bg_color);
+ 
+ 	/* Draw separator title */
+@@ -540,16 +737,24 @@ menu_create_scene(struct menu *menu)
+ 	}
+ 	menu->size.height = item_y + theme->menu_border_width;
+ 
+-	struct lab_scene_rect_options opts = {
+-		.border_colors = (float *[1]) {theme->menu_border_color},
+-		.nr_borders = 1,
+-		.border_width = theme->menu_border_width,
+-		.width = menu->size.width,
+-		.height = menu->size.height,
+-	};
+-	struct lab_scene_rect *bg_rect =
+-		lab_scene_rect_create(menu->scene_tree, &opts);
+-	wlr_scene_node_lower_to_bottom(&bg_rect->tree->node);
++	if (theme->menu_corner_radius > 0) {
++		struct wlr_scene_node *border = menu_background_create(
++			menu->scene_tree, menu->size.width, menu->size.height,
++			theme->menu_border_color, theme->menu_corner_radius,
++			theme->menu_border_width, true, true);
++		wlr_scene_node_lower_to_bottom(border);
++	} else {
++		struct lab_scene_rect_options opts = {
++			.border_colors = (float *[1]) {theme->menu_border_color},
++			.nr_borders = 1,
++			.border_width = theme->menu_border_width,
++			.width = menu->size.width,
++			.height = menu->size.height,
++		};
++		struct lab_scene_rect *bg_rect =
++			lab_scene_rect_create(menu->scene_tree, &opts);
++		wlr_scene_node_lower_to_bottom(&bg_rect->tree->node);
++	}
+ }
+ 
+ /*
+diff --git a/src/output.c b/src/output.c
+index 1308f56..516959c 100644
+--- a/src/output.c
++++ b/src/output.c
+@@ -11,9 +11,12 @@
+ #include <assert.h>
+ #include <drm_fourcc.h>
+ #include <glib.h>
++#include <math.h>
+ #include <strings.h>
+ #include <wlr/backend/wayland.h>
+ #include <wlr/config.h>
++#include <wlr/types/wlr_alpha_modifier_v1.h>
++#include <wlr/types/wlr_compositor.h>
+ #include <wlr/types/wlr_cursor.h>
+ #include <wlr/types/wlr_ext_workspace_v1.h>
+ #include <wlr/types/wlr_gamma_control_v1.h>
+@@ -36,6 +39,8 @@
+ #include "output-virtual.h"
+ #include "regions.h"
+ #include "session-lock.h"
++#include "ssd.h"
++#include "theme.h"
+ #include "view.h"
+ #include "xwayland.h"
+ 
+@@ -248,6 +253,119 @@ output_get_tearing_allowance(struct output *output)
+ 	return view->force_tearing == LAB_STATE_ENABLED;
+ }
+ 
++static void
++apply_buffer_opacity(struct wlr_scene_buffer *scene_buffer, int sx, int sy,
++		void *data)
++{
++	(void)sx;
++	(void)sy;
++
++	float opacity = *(float *)data;
++	struct wlr_scene_surface *scene_surface =
++		wlr_scene_surface_try_from_buffer(scene_buffer);
++	if (scene_surface) {
++		const struct wlr_alpha_modifier_surface_v1_state *alpha_state =
++			wlr_alpha_modifier_v1_get_surface_state(scene_surface->surface);
++		if (alpha_state) {
++			opacity *= (float)alpha_state->multiplier;
++		}
++	}
++	wlr_scene_buffer_set_opacity(scene_buffer, opacity);
++}
++
++struct view_clip_data {
++	struct wlr_surface *root_surface;
++	pixman_region32_t *rounded_region;
++};
++
++static void
++init_rounded_region(pixman_region32_t *region, const struct wlr_box *box,
++		int radius)
++{
++	pixman_region32_init(region);
++	radius = MIN(radius, MIN(box->width, box->height) / 2);
++	if (radius <= 0) {
++		pixman_region32_union_rect(region, region,
++			box->x, box->y, box->width, box->height);
++		return;
++	}
++
++	pixman_region32_union_rect(region, region,
++		box->x, box->y + radius, box->width, box->height - 2 * radius);
++	for (int row = 0; row < radius; ++row) {
++		double dy = radius - row - 0.5;
++		int inset = ceil(radius - sqrt(radius * radius - dy * dy));
++		int width = MAX(box->width - 2 * inset, 0);
++		pixman_region32_union_rect(region, region,
++			box->x + inset, box->y + row, width, 1);
++		pixman_region32_union_rect(region, region,
++			box->x + inset, box->y + box->height - row - 1, width, 1);
++	}
++}
++
++static void
++apply_buffer_clip(struct wlr_scene_buffer *scene_buffer, int sx, int sy,
++		void *data)
++{
++	struct view_clip_data *clip = data;
++	struct wlr_scene_surface *scene_surface =
++		wlr_scene_surface_try_from_buffer(scene_buffer);
++	if (!clip->rounded_region || !scene_surface
++			|| wlr_surface_get_root_surface(scene_surface->surface)
++				!= clip->root_surface) {
++		wlr_scene_buffer_set_clip_region(scene_buffer, NULL);
++		return;
++	}
++
++	pixman_region32_t local_region;
++	pixman_region32_init(&local_region);
++	pixman_region32_copy(&local_region, clip->rounded_region);
++	pixman_region32_translate(&local_region, -sx, -sy);
++	wlr_scene_buffer_set_clip_region(scene_buffer, &local_region);
++	pixman_region32_fini(&local_region);
++}
++
++static void
++apply_view_effects(void)
++{
++	struct view *view;
++	wl_list_for_each(view, &server.views, link) {
++		if (!view->mapped || !view->scene_tree) {
++			continue;
++		}
++		enum ssd_active_state state = server.active_view == view
++			? SSD_ACTIVE : SSD_INACTIVE;
++		float opacity = rc.theme->window[state].opacity;
++		wlr_scene_node_for_each_buffer(&view->scene_tree->node,
++			apply_buffer_opacity, &opacity);
++
++		pixman_region32_t rounded_region;
++		pixman_region32_t *rounded_region_ptr = NULL;
++		if (view_is_floating(view) && rc.corner_radius > 0 && view->surface) {
++			struct wlr_box extents = ssd_max_extents(view);
++			int tree_x, tree_y;
++			wlr_scene_node_coords(&view->content_tree->node, &tree_x, &tree_y);
++			/*
++			 * for_each_buffer() reports coordinates relative to the parent of
++			 * the root node passed to it, rather than layout coordinates.
++			 */
++			extents.x -= tree_x - view->content_tree->node.x;
++			extents.y -= tree_y - view->content_tree->node.y;
++			init_rounded_region(&rounded_region, &extents, rc.corner_radius);
++			rounded_region_ptr = &rounded_region;
++		}
++		struct view_clip_data clip = {
++			.root_surface = view->surface,
++			.rounded_region = rounded_region_ptr,
++		};
++		wlr_scene_node_for_each_buffer(&view->content_tree->node,
++			apply_buffer_clip, &clip);
++		if (rounded_region_ptr) {
++			pixman_region32_fini(&rounded_region);
++		}
++	}
++}
++
+ static void
+ handle_output_frame(struct wl_listener *listener, void *data)
+ {
+@@ -272,6 +390,7 @@ handle_output_frame(struct wl_listener *listener, void *data)
+ 	struct wlr_scene_output *scene_output = output->scene_output;
+ 	struct wlr_output_state *pending = &output->pending;
+ 
++	apply_view_effects();
+ 	pending->tearing_page_flip = output_get_tearing_allowance(output);
+ 
+ 	lab_wlr_scene_output_commit(scene_output, pending);
+diff --git a/src/ssd/ssd-border.c b/src/ssd/ssd-border.c
+index c2c99f8..1b17b0b 100644
+--- a/src/ssd/ssd-border.c
++++ b/src/ssd/ssd-border.c
+@@ -1,69 +1,187 @@
+ // SPDX-License-Identifier: GPL-2.0-only
+ 
+ #include <assert.h>
++#include <math.h>
++#include <stdint.h>
++#include <string.h>
++#include <cairo.h>
++#include <wlr/types/wlr_buffer.h>
+ #include <wlr/types/wlr_scene.h>
++#include "buffer.h"
+ #include "common/macros.h"
+ #include "common/scene-helpers.h"
+ #include "config/rcxml.h"
++#include "node.h"
+ #include "ssd.h"
+ #include "ssd-internal.h"
+ #include "theme.h"
+ #include "view.h"
+ 
++static void
++add_color_stop(cairo_pattern_t *pattern, double offset, const float color[4])
++{
++	double alpha = color[3];
++	double red = alpha > 0.0 ? color[0] / alpha : 0.0;
++	double green = alpha > 0.0 ? color[1] / alpha : 0.0;
++	double blue = alpha > 0.0 ? color[2] / alpha : 0.0;
++	cairo_pattern_add_color_stop_rgba(pattern, offset,
++		red, green, blue, alpha);
++}
++
++static cairo_pattern_t *
++create_border_pattern(int width, int height, float colors[3][4], int count)
++{
++	count = CLAMP(count, 1, 3);
++	if (count == 1) {
++		double alpha = colors[0][3];
++		return cairo_pattern_create_rgba(
++			alpha > 0.0 ? colors[0][0] / alpha : 0.0,
++			alpha > 0.0 ? colors[0][1] / alpha : 0.0,
++			alpha > 0.0 ? colors[0][2] / alpha : 0.0,
++			alpha);
++	}
++
++	cairo_pattern_t *pattern = cairo_pattern_create_linear(0, 0,
++		width, height);
++	for (int i = 0; i < count; i++) {
++		add_color_stop(pattern, (double)i / (double)(count - 1), colors[i]);
++	}
++	return pattern;
++}
++
++static void
++rounded_border_path(cairo_t *cairo, int width, int height,
++		int radius, int line_width, bool rounded)
++{
++	double half = line_width / 2.0;
++	if (!rounded) {
++		cairo_rectangle(cairo, half, half,
++			MAX(width - line_width, 0), MAX(height - line_width, 0));
++		return;
++	}
++
++	double r = MIN(radius, MIN(width, height) / 2.0);
++	double arc_radius = MAX(r - half, 0.0);
++	const double deg = acos(-1.0) / 180.0;
++	cairo_new_sub_path(cairo);
++	cairo_move_to(cairo, r, half);
++	cairo_line_to(cairo, width - r, half);
++	cairo_arc(cairo, width - r, r, arc_radius, -90 * deg, 0 * deg);
++	cairo_line_to(cairo, width - half, height - r);
++	cairo_arc(cairo, width - r, height - r, arc_radius, 0 * deg, 90 * deg);
++	cairo_line_to(cairo, r, height - half);
++	cairo_arc(cairo, r, height - r, arc_radius, 90 * deg, 180 * deg);
++	cairo_line_to(cairo, half, r);
++	cairo_arc(cairo, r, r, arc_radius, 180 * deg, 270 * deg);
++	cairo_close_path(cairo);
++}
++
++static struct lab_data_buffer *
++render_border_part(int part_x, int part_y, int part_width, int part_height,
++		int full_width, int full_height, int radius, int line_width,
++		bool rounded, float colors[3][4], int color_count)
++{
++	struct lab_data_buffer *buffer = buffer_create_cairo(
++		part_width, part_height, 1);
++	assert(buffer);
++	cairo_t *cairo = cairo_create(buffer->surface);
++
++	cairo_set_operator(cairo, CAIRO_OPERATOR_CLEAR);
++	cairo_paint(cairo);
++	cairo_set_operator(cairo, CAIRO_OPERATOR_SOURCE);
++	cairo_set_antialias(cairo, CAIRO_ANTIALIAS_BEST);
++	cairo_set_line_width(cairo, line_width);
++	cairo_set_line_cap(cairo, CAIRO_LINE_CAP_BUTT);
++	cairo_set_line_join(cairo, CAIRO_LINE_JOIN_ROUND);
++	cairo_translate(cairo, -part_x, -part_y);
++
++	cairo_pattern_t *pattern = create_border_pattern(
++		full_width, full_height, colors, color_count);
++	cairo_set_source(cairo, pattern);
++	rounded_border_path(cairo, full_width, full_height,
++		radius, line_width, rounded);
++	cairo_stroke(cairo);
++	cairo_pattern_destroy(pattern);
++
++	cairo_surface_flush(buffer->surface);
++	cairo_destroy(cairo);
++	return buffer;
++}
++
++static bool
++border_accepts_input(struct wlr_scene_buffer *scene_buffer,
++		double *sx, double *sy)
++{
++	struct wlr_buffer *buffer = scene_buffer->buffer;
++	int x = floor(*sx);
++	int y = floor(*sy);
++	if (!buffer || x < 0 || y < 0 || x >= buffer->width || y >= buffer->height) {
++		return false;
++	}
++
++	void *data;
++	uint32_t format;
++	size_t stride;
++	if (!wlr_buffer_begin_data_ptr_access(buffer,
++			WLR_BUFFER_DATA_PTR_ACCESS_READ, &data, &format, &stride)) {
++		return true;
++	}
++	(void)format;
++	uint8_t alpha = ((uint8_t *)data)[y * stride + x * 4 + 3];
++	wlr_buffer_end_data_ptr_access(buffer);
++	return alpha > 0;
++}
++
++static void
++update_border_part(struct wlr_scene_buffer *scene_buffer,
++		int x, int y, int width, int height,
++		int full_width, int full_height, int radius, int line_width,
++		bool rounded, float colors[3][4], int color_count)
++{
++	if (width <= 0 || height <= 0) {
++		wlr_scene_node_set_enabled(&scene_buffer->node, false);
++		return;
++	}
++
++	struct lab_data_buffer *buffer = render_border_part(x, y, width, height,
++		full_width, full_height, radius, line_width,
++		rounded, colors, color_count);
++	wlr_scene_buffer_set_buffer(scene_buffer, &buffer->base);
++	wlr_scene_buffer_set_dest_size(scene_buffer, width, height);
++	wlr_buffer_drop(&buffer->base);
++	wlr_scene_node_set_position(&scene_buffer->node, x, y);
++	wlr_scene_node_set_enabled(&scene_buffer->node, true);
++}
++
+ void
+ ssd_border_create(struct ssd *ssd)
+ {
+ 	assert(ssd);
+ 	assert(!ssd->border.tree);
+ 
+-	struct view *view = ssd->view;
+-	struct theme *theme = rc.theme;
+-	int width = view->current.width;
+-	int height = view_effective_height(view, /* use_pending */ false);
+-	int full_width = width + 2 * theme->border_width;
+-	int corner_width = ssd_get_corner_width();
+-
+-	ssd->border.tree = lab_wlr_scene_tree_create(ssd->tree);
+-	wlr_scene_node_set_position(&ssd->border.tree->node, -theme->border_width, 0);
++	ssd->border.tree = lab_wlr_scene_tree_create(ssd->view->scene_tree);
++	node_descriptor_create(&ssd->border.tree->node,
++		LAB_NODE_SSD_ROOT, ssd->view, NULL);
+ 
+ 	enum ssd_active_state active;
+ 	FOR_EACH_ACTIVE_STATE(active) {
+ 		struct ssd_border_subtree *subtree = &ssd->border.subtrees[active];
+ 		subtree->tree = lab_wlr_scene_tree_create(ssd->border.tree);
+-		struct wlr_scene_tree *parent = subtree->tree;
+-		wlr_scene_node_set_enabled(&parent->node, active);
+-		float *color = theme->window[active].border_color;
+-
+-		subtree->left = lab_wlr_scene_rect_create(parent,
+-			theme->border_width, height, color);
+-		wlr_scene_node_set_position(&subtree->left->node, 0, 0);
+-
+-		subtree->right = lab_wlr_scene_rect_create(parent,
+-			theme->border_width, height, color);
+-		wlr_scene_node_set_position(&subtree->right->node,
+-			theme->border_width + width, 0);
+-
+-		subtree->bottom = lab_wlr_scene_rect_create(parent,
+-			full_width, theme->border_width, color);
+-		wlr_scene_node_set_position(&subtree->bottom->node,
+-			0, height);
+-
+-		subtree->top = lab_wlr_scene_rect_create(parent,
+-			MAX(width - 2 * corner_width, 0), theme->border_width, color);
+-		wlr_scene_node_set_position(&subtree->top->node,
+-			theme->border_width + corner_width,
+-			-(ssd->titlebar.height + theme->border_width));
++		wlr_scene_node_set_enabled(&subtree->tree->node, active);
++		subtree->top = lab_wlr_scene_buffer_create(subtree->tree, NULL);
++		subtree->bottom = lab_wlr_scene_buffer_create(subtree->tree, NULL);
++		subtree->left = lab_wlr_scene_buffer_create(subtree->tree, NULL);
++		subtree->right = lab_wlr_scene_buffer_create(subtree->tree, NULL);
++		subtree->top->point_accepts_input = border_accepts_input;
++		subtree->bottom->point_accepts_input = border_accepts_input;
++		subtree->left->point_accepts_input = border_accepts_input;
++		subtree->right->point_accepts_input = border_accepts_input;
+ 	}
+ 
+-	if (view->maximized == VIEW_AXIS_BOTH) {
++	if (ssd->view->maximized == VIEW_AXIS_BOTH) {
+ 		wlr_scene_node_set_enabled(&ssd->border.tree->node, false);
+ 	}
+-
+-	if (view->current.width > 0 && view->current.height > 0) {
+-		/*
+-		 * The SSD is recreated by a Reconfigure request
+-		 * thus we may need to handle squared corners.
+-		 */
++	if (ssd->view->current.width > 0 && ssd->view->current.height > 0) {
+ 		ssd_border_update(ssd);
+ 	}
+ }
+@@ -73,85 +191,73 @@ ssd_border_update(struct ssd *ssd)
+ {
+ 	assert(ssd);
+ 	assert(ssd->border.tree);
+-
+ 	struct view *view = ssd->view;
+-	if (view->maximized == VIEW_AXIS_BOTH
+-			&& ssd->border.tree->node.enabled) {
+-		/* Disable borders on maximize */
+-		wlr_scene_node_set_enabled(&ssd->border.tree->node, false);
+-		ssd->margin = ssd_thickness(ssd->view);
+-	}
+ 
+ 	if (view->maximized == VIEW_AXIS_BOTH) {
++		if (ssd->border.tree->node.enabled) {
++			wlr_scene_node_set_enabled(&ssd->border.tree->node, false);
++			ssd->margin = ssd_thickness(view);
++		}
+ 		return;
+-	} else if (!ssd->border.tree->node.enabled) {
+-		/* And re-enabled them when unmaximized */
++	}
++	if (!ssd->border.tree->node.enabled) {
+ 		wlr_scene_node_set_enabled(&ssd->border.tree->node, true);
+-		ssd->margin = ssd_thickness(ssd->view);
++		ssd->margin = ssd_thickness(view);
+ 	}
+ 
+ 	struct theme *theme = rc.theme;
+-
++	int line_width = theme->border_width;
++	int titlebar_height = view_titlebar_visible(view) ? ssd->titlebar.height : 0;
+ 	int width = view->current.width;
+ 	int height = view_effective_height(view, /* use_pending */ false);
+-	int full_width = width + 2 * theme->border_width;
+-	int corner_width = ssd_get_corner_width();
+-
+-	/*
+-	 * From here on we have to cover the following border scenarios:
+-	 * Non-tiled (partial border, rounded corners):
+-	 *    _____________
+-	 *   o           oox
+-	 *  |---------------|
+-	 *  |_______________|
+-	 *
+-	 * Tiled (full border, squared corners):
+-	 *   _______________
+-	 *  |o           oox|
+-	 *  |---------------|
+-	 *  |_______________|
+-	 *
+-	 * Tiled or non-tiled with zero title height (full boarder, no title):
+-	 *   _______________
+-	 *  |_______________|
+-	 */
+-
+-	int side_height = ssd->state.was_squared
+-		? height + ssd->titlebar.height
+-		: height;
+-	int side_y = ssd->state.was_squared
+-		? -ssd->titlebar.height
+-		: 0;
+-	int top_width = ssd->titlebar.height <= 0 || ssd->state.was_squared
+-		? full_width
+-		: MAX(width - 2 * corner_width, 0);
+-	int top_x = ssd->titlebar.height <= 0 || ssd->state.was_squared
+-		? 0
+-		: theme->border_width + corner_width;
++	int full_width = width + 2 * line_width;
++	int full_height = height + titlebar_height + 2 * line_width;
++	if (line_width <= 0 || full_width <= 0 || full_height <= 0) {
++		wlr_scene_node_set_enabled(&ssd->border.tree->node, false);
++		return;
++	}
++
++	bool rounded = !ssd->state.was_squared && rc.corner_radius > 0
++		&& full_width >= 2 * rc.corner_radius
++		&& full_height >= 2 * rc.corner_radius;
++	int band_height = rounded
++		? MIN(full_height / 2, rc.corner_radius + line_width)
++		: line_width;
++	int side_height = MAX(full_height - 2 * band_height, 0);
++
++	wlr_scene_node_set_position(&ssd->border.tree->node,
++		-line_width, -(titlebar_height + line_width));
++	wlr_scene_node_raise_to_top(&ssd->border.tree->node);
+ 
+ 	enum ssd_active_state active;
+ 	FOR_EACH_ACTIVE_STATE(active) {
+ 		struct ssd_border_subtree *subtree = &ssd->border.subtrees[active];
++		float (*colors)[4] = theme->window[active].border_colors;
++		int color_count = theme->window[active].border_color_count;
++		float inhibit_colors[3][4] = {{0}};
++		if (active == SSD_ACTIVE && view->inhibits_keybinds) {
++			memcpy(inhibit_colors[0], theme->window_toggled_keybinds_color,
++				sizeof(inhibit_colors[0]));
++			colors = inhibit_colors;
++			color_count = 1;
++		}
+ 
+-		wlr_scene_rect_set_size(subtree->left,
+-			theme->border_width, side_height);
+-		wlr_scene_node_set_position(&subtree->left->node,
+-			0, side_y);
+-
+-		wlr_scene_rect_set_size(subtree->right,
+-			theme->border_width, side_height);
+-		wlr_scene_node_set_position(&subtree->right->node,
+-			theme->border_width + width, side_y);
+-
+-		wlr_scene_rect_set_size(subtree->bottom,
+-			full_width, theme->border_width);
+-		wlr_scene_node_set_position(&subtree->bottom->node,
+-			0, height);
+-
+-		wlr_scene_rect_set_size(subtree->top,
+-			top_width, theme->border_width);
+-		wlr_scene_node_set_position(&subtree->top->node,
+-			top_x, -(ssd->titlebar.height + theme->border_width));
++		update_border_part(subtree->top,
++			0, 0, full_width, band_height,
++			full_width, full_height, rc.corner_radius, line_width,
++			rounded, colors, color_count);
++		update_border_part(subtree->bottom,
++			0, full_height - band_height, full_width, band_height,
++			full_width, full_height, rc.corner_radius, line_width,
++			rounded, colors, color_count);
++		update_border_part(subtree->left,
++			0, band_height, line_width, side_height,
++			full_width, full_height, rc.corner_radius, line_width,
++			rounded, colors, color_count);
++		update_border_part(subtree->right,
++			full_width - line_width, band_height, line_width, side_height,
++			full_width, full_height, rc.corner_radius, line_width,
++			rounded, colors, color_count);
+ 	}
+ }
+ 
+@@ -160,7 +266,6 @@ ssd_border_destroy(struct ssd *ssd)
+ {
+ 	assert(ssd);
+ 	assert(ssd->border.tree);
+-
+ 	wlr_scene_node_destroy(&ssd->border.tree->node);
+ 	ssd->border = (struct ssd_border_scene){0};
+ }
+diff --git a/src/ssd/ssd.c b/src/ssd/ssd.c
+index e2ab637..015ed9d 100644
+--- a/src/ssd/ssd.c
++++ b/src/ssd/ssd.c
+@@ -346,10 +346,7 @@ ssd_enable_keybind_inhibit_indicator(struct ssd *ssd, bool enable)
+ 		return;
+ 	}
+ 
+-	float *color = enable
+-		? rc.theme->window_toggled_keybinds_color
+-		: rc.theme->window[SSD_ACTIVE].border_color;
+-	wlr_scene_rect_set_color(ssd->border.subtrees[SSD_ACTIVE].top, color);
++	ssd_border_update(ssd);
+ }
+ 
+ bool
+diff --git a/src/theme.c b/src/theme.c
+index 71e577c..99f59c6 100644
+--- a/src/theme.c
++++ b/src/theme.c
+@@ -27,6 +27,7 @@
+ #include "common/match.h"
+ #include "common/mem.h"
+ #include "common/parse-bool.h"
++#include "common/parse-double.h"
+ #include "common/string-helpers.h"
+ #include "config/rcxml.h"
+ #include "img/img.h"
+@@ -44,7 +45,9 @@ struct button {
+ 
+ enum rounded_corner {
+ 	ROUNDED_CORNER_TOP_LEFT,
+-	ROUNDED_CORNER_TOP_RIGHT
++	ROUNDED_CORNER_TOP_RIGHT,
++	ROUNDED_CORNER_BOTTOM_LEFT,
++	ROUNDED_CORNER_BOTTOM_RIGHT
+ };
+ 
+ struct rounded_corner_ctx {
+@@ -440,14 +443,16 @@ parse_hexstr(const char *hex, float *rgba)
+ 	rgba[2] *= rgba[3];
+ }
+ 
+-static void
++static int
+ parse_hexstrs(const char *hexes, float colors[3][4])
+ {
+ 	gchar **elements = g_strsplit(hexes, ",", -1);
+-	for (int i = 0; elements[i] && i < 3; i++) {
+-		parse_hexstr(elements[i], colors[i]);
++	int count = 0;
++	for (; elements[count] && count < 3; count++) {
++		parse_hexstr(g_strstrip(elements[count]), colors[count]);
+ 	}
+ 	g_strfreev(elements);
++	return count;
+ }
+ 
+ static void
+@@ -481,6 +486,26 @@ parse_color(const char *str, float *rgba)
+ 	}
+ }
+ 
++static void
++parse_window_border_color(const char *str, struct theme *theme,
++		enum ssd_active_state active)
++{
++	if (strchr(str, ',')) {
++		theme->window[active].border_color_count = parse_hexstrs(str,
++			theme->window[active].border_colors);
++		memcpy(theme->window[active].border_color,
++			theme->window[active].border_colors[0],
++			sizeof(theme->window[active].border_color));
++		return;
++	}
++
++	parse_color(str, theme->window[active].border_color);
++	memcpy(theme->window[active].border_colors[0],
++		theme->window[active].border_color,
++		sizeof(theme->window[active].border_color));
++	theme->window[active].border_color_count = 1;
++}
++
+ static enum lab_gradient
+ parse_gradient(const char *str)
+ {
+@@ -537,6 +562,14 @@ theme_builtin(struct theme *theme)
+ 
+ 	parse_hexstr("#aaaaaa", theme->window[SSD_ACTIVE].border_color);
+ 	parse_hexstr("#aaaaaa", theme->window[SSD_INACTIVE].border_color);
++	memcpy(theme->window[SSD_ACTIVE].border_colors[0],
++		theme->window[SSD_ACTIVE].border_color,
++		sizeof(theme->window[SSD_ACTIVE].border_color));
++	memcpy(theme->window[SSD_INACTIVE].border_colors[0],
++		theme->window[SSD_INACTIVE].border_color,
++		sizeof(theme->window[SSD_INACTIVE].border_color));
++	theme->window[SSD_ACTIVE].border_color_count = 1;
++	theme->window[SSD_INACTIVE].border_color_count = 1;
+ 
+ 	parse_hexstr("#ff0000", theme->window_toggled_keybinds_color);
+ 
+@@ -554,6 +587,8 @@ theme_builtin(struct theme *theme)
+ 	parse_hexstr("#000000", theme->window[SSD_ACTIVE].label_text_color);
+ 	parse_hexstr("#000000", theme->window[SSD_INACTIVE].label_text_color);
+ 	theme->window_label_text_justify = parse_justification("Center");
++	theme->window[SSD_ACTIVE].opacity = 1.0f;
++	theme->window[SSD_INACTIVE].opacity = 1.0f;
+ 
+ 	theme->window_button_width = 26;
+ 	theme->window_button_height = 26;
+@@ -580,6 +615,7 @@ theme_builtin(struct theme *theme)
+ 	theme->menu_min_width = 20;
+ 	theme->menu_max_width = 200;
+ 	theme->menu_border_width = INT_MIN;
++	theme->menu_corner_radius = 0;
+ 	theme->menu_border_color[0] = FLT_MIN;
+ 
+ 	theme->menu_items_padding_x = 7;
+@@ -627,10 +663,12 @@ theme_builtin(struct theme *theme)
+ 	theme->osd_workspace_switcher_boxes_width = 20;
+ 	theme->osd_workspace_switcher_boxes_height = 20;
+ 	theme->osd_workspace_switcher_boxes_border_width = 2;
++	theme->osd_workspace_switcher_boxes_corner_radius = 0;
+ 
+ 	/* inherit settings in post_processing() if not set elsewhere */
+ 	theme->osd_bg_color[0] = FLT_MIN;
+ 	theme->osd_border_width = INT_MIN;
++	theme->osd_corner_radius = 0;
+ 	theme->osd_border_color[0] = FLT_MIN;
+ 	theme->osd_label_text_color[0] = FLT_MIN;
+ 
+@@ -675,6 +713,22 @@ get_int_if_positive(const char *content, const char *field)
+ 	return value;
+ }
+ 
++static void
++set_opacity(const char *content, float *opacity, const char *field)
++{
++	float value;
++	if (!set_float(content, &value)) {
++		return;
++	}
++
++	if (value < 0.0f || value > 1.0f) {
++		wlr_log(WLR_ERROR,
++			"%s must be between 0.0 and 1.0, clamping it.", field);
++		value = CLAMP(value, 0.0f, 1.0f);
++	}
++	*opacity = value;
++}
++
+ static void
+ entry(struct theme *theme, const char *key, const char *value)
+ {
+@@ -711,15 +765,23 @@ entry(struct theme *theme, const char *key, const char *value)
+ 	}
+ 
+ 	if (match_glob(key, "window.active.border.color")) {
+-		parse_color(value, theme->window[SSD_ACTIVE].border_color);
++		parse_window_border_color(value, theme, SSD_ACTIVE);
+ 	}
+ 	if (match_glob(key, "window.inactive.border.color")) {
+-		parse_color(value, theme->window[SSD_INACTIVE].border_color);
++		parse_window_border_color(value, theme, SSD_INACTIVE);
++	}
++	if (match_glob(key, "window.active.opacity")) {
++		set_opacity(value, &theme->window[SSD_ACTIVE].opacity,
++			"window.active.opacity");
++	}
++	if (match_glob(key, "window.inactive.opacity")) {
++		set_opacity(value, &theme->window[SSD_INACTIVE].opacity,
++			"window.inactive.opacity");
+ 	}
+ 	/* border.color is obsolete, but handled for backward compatibility */
+ 	if (match_glob(key, "border.color")) {
+-		parse_color(value, theme->window[SSD_ACTIVE].border_color);
+-		parse_color(value, theme->window[SSD_INACTIVE].border_color);
++		parse_window_border_color(value, theme, SSD_ACTIVE);
++		parse_window_border_color(value, theme, SSD_INACTIVE);
+ 	}
+ 
+ 	if (match_glob(key, "window.active.indicator.toggled-keybind.color")) {
+@@ -901,6 +963,10 @@ entry(struct theme *theme, const char *key, const char *value)
+ 		theme->menu_border_width = get_int_if_positive(
+ 			value, "menu.border.width");
+ 	}
++	if (match_glob(key, "menu.corner-radius")) {
++		theme->menu_corner_radius = get_int_if_positive(
++			value, "menu.corner-radius");
++	}
+ 	if (match_glob(key, "menu.border.color")) {
+ 		parse_color(value, theme->menu_border_color);
+ 	}
+@@ -962,6 +1028,10 @@ entry(struct theme *theme, const char *key, const char *value)
+ 	if (match_glob(key, "osd.border.color")) {
+ 		parse_color(value, theme->osd_border_color);
+ 	}
++	if (match_glob(key, "osd.cornerRadius")) {
++		theme->osd_corner_radius = get_int_if_positive(
++			value, "osd.cornerRadius");
++	}
+ 	/* classic window switcher */
+ 	if (match_glob(key, "osd.window-switcher.style-classic.width")
+ 			|| match_glob(key, "osd.window-switcher.width")) {
+@@ -1072,6 +1142,11 @@ entry(struct theme *theme, const char *key, const char *value)
+ 			get_int_if_positive(
+ 				value, "osd.workspace-switcher.boxes.border.width");
+ 	}
++	if (match_glob(key, "osd.workspace-switcher.boxes.cornerRadius")) {
++		theme->osd_workspace_switcher_boxes_corner_radius =
++			get_int_if_positive(value,
++				"osd.workspace-switcher.boxes.cornerRadius");
++	}
+ 	if (match_glob(key, "osd.label.text.color")) {
+ 		parse_color(value, theme->osd_label_text_color);
+ 	}
+@@ -1221,9 +1296,13 @@ rounded_rect(struct rounded_corner_ctx *ctx)
+ 		cairo_line_to(cairo, 0, h);
+ 		cairo_line_to(cairo, 0, 0);
+ 		break;
++	case ROUNDED_CORNER_BOTTOM_LEFT:
++	case ROUNDED_CORNER_BOTTOM_RIGHT:
++		break;
+ 	}
+-	cairo_close_path(cairo);
+-	cairo_set_operator(cairo, CAIRO_OPERATOR_SOURCE);
++	if (ctx->fill_pattern) {
++		cairo_close_path(cairo);
++		cairo_set_operator(cairo, CAIRO_OPERATOR_SOURCE);
+ 	/*
+ 	 * We need to offset the fill pattern vertically by the border
+ 	 * width to line up with the rest of the titlebar. This is done
+@@ -1231,16 +1310,18 @@ rounded_rect(struct rounded_corner_ctx *ctx)
+ 	 * It would be better to copy the pattern, but cairo does not
+ 	 * provide a simple way to this.
+ 	 */
+-	cairo_matrix_t matrix;
+-	cairo_matrix_init_translate(&matrix, 0, -ctx->line_width);
+-	cairo_pattern_set_matrix(ctx->fill_pattern, &matrix);
+-	cairo_set_source(cairo, ctx->fill_pattern);
+-	cairo_fill_preserve(cairo);
+-	cairo_stroke(cairo);
++		cairo_matrix_t matrix;
++		cairo_matrix_init_translate(&matrix, 0, -ctx->line_width);
++		cairo_pattern_set_matrix(ctx->fill_pattern, &matrix);
++		cairo_set_source(cairo, ctx->fill_pattern);
++		cairo_fill_preserve(cairo);
++		cairo_stroke(cairo);
+ 
+ 	/* Reset the fill pattern transformation matrix afterward */
+-	cairo_matrix_init_identity(&matrix);
+-	cairo_pattern_set_matrix(ctx->fill_pattern, &matrix);
++		cairo_matrix_init_identity(&matrix);
++		cairo_pattern_set_matrix(ctx->fill_pattern, &matrix);
++	}
++	cairo_new_path(cairo);
+ 
+ 	/*
+ 	 * Stroke horizontal and vertical borders, shown by Xs and Ys
+@@ -1258,6 +1339,7 @@ rounded_rect(struct rounded_corner_ctx *ctx)
+ 	 *    Y                    |
+ 	 *    Y--------------------+
+ 	 */
++	cairo_set_operator(cairo, CAIRO_OPERATOR_SOURCE);
+ 	cairo_set_line_cap(cairo, CAIRO_LINE_CAP_BUTT);
+ 	set_cairo_color(cairo, ctx->border_color);
+ 	cairo_set_line_width(cairo, ctx->line_width);
+@@ -1275,6 +1357,18 @@ rounded_rect(struct rounded_corner_ctx *ctx)
+ 		cairo_move_to(cairo, w - half_line_width, r);
+ 		cairo_line_to(cairo, w - half_line_width, h);
+ 		break;
++	case ROUNDED_CORNER_BOTTOM_LEFT:
++		cairo_move_to(cairo, half_line_width, 0);
++		cairo_line_to(cairo, half_line_width, ctx->line_width);
++		cairo_move_to(cairo, r, h - half_line_width);
++		cairo_line_to(cairo, w, h - half_line_width);
++		break;
++	case ROUNDED_CORNER_BOTTOM_RIGHT:
++		cairo_move_to(cairo, 0, h - half_line_width);
++		cairo_line_to(cairo, w - r, h - half_line_width);
++		cairo_move_to(cairo, w - half_line_width, ctx->line_width);
++		cairo_line_to(cairo, w - half_line_width, 0);
++		break;
+ 	}
+ 	cairo_stroke(cairo);
+ 
+@@ -1318,7 +1412,8 @@ rounded_rect(struct rounded_corner_ctx *ctx)
+ 	 *
+ 	 * Also, see diagrams in https://github.com/labwc/labwc/pull/990
+ 	 */
+-	double line_width = MIN(ctx->line_width, r);
++	bool outline_only = !ctx->fill_pattern;
++	double line_width = MIN(ctx->line_width + (outline_only ? 1.0 : 0.0), r);
+ 	cairo_set_line_width(cairo, line_width);
+ 	half_line_width = line_width / 2.0;
+ 	switch (ctx->corner) {
+@@ -1330,6 +1425,16 @@ rounded_rect(struct rounded_corner_ctx *ctx)
+ 		cairo_move_to(cairo, w - r, half_line_width);
+ 		cairo_arc(cairo, w - r, r, r - half_line_width, -90 * deg, 0 * deg);
+ 		break;
++	case ROUNDED_CORNER_BOTTOM_LEFT:
++		cairo_move_to(cairo, r, h - half_line_width);
++		cairo_arc(cairo, r, ctx->line_width, r - half_line_width,
++			90 * deg, 180 * deg);
++		break;
++	case ROUNDED_CORNER_BOTTOM_RIGHT:
++		cairo_move_to(cairo, w - half_line_width, ctx->line_width);
++		cairo_arc(cairo, w - r, ctx->line_width, r - half_line_width,
++			0 * deg, 90 * deg);
++		break;
+ 	}
+ 	cairo_stroke(cairo);
+ 
+@@ -1437,6 +1542,18 @@ create_corners(struct theme *theme)
+ 		theme->window[active].corner_top_left_normal = rounded_rect(&ctx);
+ 		ctx.corner = ROUNDED_CORNER_TOP_RIGHT;
+ 		theme->window[active].corner_top_right_normal = rounded_rect(&ctx);
++
++		box.height = corner_width + theme->border_width;
++		ctx.fill_pattern = NULL;
++		ctx.corner = ROUNDED_CORNER_TOP_LEFT;
++		theme->window[active].corner_top_left_border = rounded_rect(&ctx);
++		ctx.corner = ROUNDED_CORNER_TOP_RIGHT;
++		theme->window[active].corner_top_right_border = rounded_rect(&ctx);
++		ctx.corner = ROUNDED_CORNER_BOTTOM_LEFT;
++		theme->window[active].corner_bottom_left_normal = rounded_rect(&ctx);
++		ctx.corner = ROUNDED_CORNER_BOTTOM_RIGHT;
++		theme->window[active].corner_bottom_right_normal = rounded_rect(&ctx);
++		box.height = theme->titlebar_height + theme->border_width;
+ 	}
+ }
+ 
+@@ -1727,6 +1844,7 @@ post_processing(struct theme *theme)
+ 	if (theme->menu_border_width == INT_MIN) {
+ 		theme->menu_border_width = theme->border_width;
+ 	}
++	theme->menu_corner_radius = MAX(theme->menu_corner_radius, 0);
+ 	if (theme->menu_border_color[0] == FLT_MIN) {
+ 		memcpy(theme->menu_border_color,
+ 			theme->window[SSD_ACTIVE].border_color,
+@@ -1874,6 +1992,10 @@ theme_finish(struct theme *theme)
+ 		zdrop(&theme->window[active].titlebar_fill);
+ 		zdrop(&theme->window[active].corner_top_left_normal);
+ 		zdrop(&theme->window[active].corner_top_right_normal);
++		zdrop(&theme->window[active].corner_top_left_border);
++		zdrop(&theme->window[active].corner_top_right_border);
++		zdrop(&theme->window[active].corner_bottom_left_normal);
++		zdrop(&theme->window[active].corner_bottom_right_normal);
+ 		zdrop(&theme->window[active].shadow_corner_top);
+ 		zdrop(&theme->window[active].shadow_corner_bottom);
+ 		zdrop(&theme->window[active].shadow_edge);
+diff --git a/src/view.c b/src/view.c
+index 21005f2..39f39ad 100644
+--- a/src/view.c
++++ b/src/view.c
+@@ -1514,6 +1514,21 @@ view_wants_decorations(struct view *view)
+ 	}
+ }
+ 
++enum lab_ssd_mode
++view_client_decoration_mode(struct view *view)
++{
++	/* Explicit per-window rules remain authoritative. */
++	switch (window_rules_get_property(view, "serverDecoration")) {
++	case LAB_PROP_TRUE:
++		return LAB_SSD_MODE_FULL;
++	case LAB_PROP_FALSE:
++		return LAB_SSD_MODE_NONE;
++	default:
++		return rc.ssd_keep_border
++			? LAB_SSD_MODE_BORDER : LAB_SSD_MODE_NONE;
++	}
++}
++
+ void
+ view_set_decorations(struct view *view, enum lab_ssd_mode mode, bool force_ssd)
+ {
+diff --git a/src/workspaces.c b/src/workspaces.c
+index f58709f..0b3b6d9 100644
+--- a/src/workspaces.c
++++ b/src/workspaces.c
+@@ -28,6 +28,43 @@
+ #define EXT_WORKSPACES_VERSION 1
+ 
+ /* Internal helpers */
++static void
++rounded_rectangle_path(cairo_t *cairo, double x, double y,
++		double width, double height, double radius)
++{
++	const double half_pi = 1.5707963267948966;
++	double r = MIN(radius, MIN(width, height) / 2.0);
++
++	if (r <= 0.0) {
++		cairo_rectangle(cairo, x, y, width, height);
++		return;
++	}
++
++	cairo_new_sub_path(cairo);
++	cairo_arc(cairo, x + width - r, y + r, r, -half_pi, 0);
++	cairo_arc(cairo, x + width - r, y + height - r, r, 0, half_pi);
++	cairo_arc(cairo, x + r, y + height - r, r, half_pi, 2 * half_pi);
++	cairo_arc(cairo, x + r, y + r, r, 2 * half_pi, 3 * half_pi);
++	cairo_close_path(cairo);
++}
++
++static void
++draw_rounded_border(cairo_t *cairo, double x, double y,
++		double width, double height, double radius, double border_width)
++{
++	if (border_width <= 0.0 || width <= border_width
++			|| height <= border_width) {
++		return;
++	}
++
++	double inset = border_width / 2.0;
++	rounded_rectangle_path(cairo, x + inset, y + inset,
++		width - border_width, height - border_width,
++		MAX(0.0, radius - inset));
++	cairo_set_line_width(cairo, border_width);
++	cairo_stroke(cairo);
++}
++
+ static size_t
+ parse_workspace_index(const char *name)
+ {
+@@ -96,19 +133,20 @@ _osd_update(void)
+ 		}
+ 
+ 		cairo = cairo_create(buffer->surface);
++		cairo_set_operator(cairo, CAIRO_OPERATOR_CLEAR);
++		cairo_paint(cairo);
++		cairo_set_operator(cairo, CAIRO_OPERATOR_OVER);
+ 
+ 		/* Background */
+ 		set_cairo_color(cairo, theme->osd_bg_color);
+-		cairo_rectangle(cairo, 0, 0, width, height);
++		rounded_rectangle_path(cairo, 0, 0, width, height,
++			theme->osd_corner_radius);
+ 		cairo_fill(cairo);
+ 
+ 		/* Border */
+ 		set_cairo_color(cairo, theme->osd_border_color);
+-		struct wlr_fbox border_fbox = {
+-			.width = width,
+-			.height = height,
+-		};
+-		draw_cairo_border(cairo, border_fbox, theme->osd_border_width);
++		draw_rounded_border(cairo, 0, 0, width, height,
++			theme->osd_corner_radius, theme->osd_border_width);
+ 
+ 		/* Boxes */
+ 		uint16_t x;
+@@ -117,17 +155,14 @@ _osd_update(void)
+ 			wl_list_for_each(workspace, &server.workspaces.all, link) {
+ 				bool active = workspace == server.workspaces.current;
+ 				set_cairo_color(cairo, rc.theme->osd_label_text_color);
+-				struct wlr_fbox fbox = {
+-					.x = x,
+-					.y = margin,
+-					.width = rect_width,
+-					.height = rect_height,
+-				};
+-				draw_cairo_border(cairo, fbox,
++				draw_rounded_border(cairo, x, margin,
++					rect_width, rect_height,
++					theme->osd_workspace_switcher_boxes_corner_radius,
+ 					theme->osd_workspace_switcher_boxes_border_width);
+ 				if (active) {
+-					cairo_rectangle(cairo, x, margin,
+-						rect_width, rect_height);
++					rounded_rectangle_path(cairo, x, margin,
++						rect_width, rect_height,
++						theme->osd_workspace_switcher_boxes_corner_radius);
+ 					cairo_fill(cairo);
+ 				}
+ 				x += rect_width + padding;
+diff --git a/src/xdg.c b/src/xdg.c
+index ccba0de..d0530c6 100644
+--- a/src/xdg.c
++++ b/src/xdg.c
+@@ -855,7 +855,7 @@ handle_map(struct wl_listener *listener, void *data)
+ 		if (view_wants_decorations(view)) {
+ 			view_set_ssd_mode(view, LAB_SSD_MODE_FULL);
+ 		} else {
+-			view_set_ssd_mode(view, LAB_SSD_MODE_NONE);
++			view_set_ssd_mode(view, view_client_decoration_mode(view));
+ 		}
+ 
+ 		/*
+diff --git a/src/xwayland.c b/src/xwayland.c
+index 9bca84e..ac2389e 100644
+--- a/src/xwayland.c
++++ b/src/xwayland.c
+@@ -216,6 +216,21 @@ want_deco(struct wlr_xwayland_surface *xwayland_surface)
+ 		WLR_XWAYLAND_SURFACE_DECORATIONS_ALL;
+ }
+ 
++static enum lab_ssd_mode
++xwayland_decoration_mode(struct view *view)
++{
++	struct wlr_xwayland_surface *xsurface = xwayland_surface_from_view(view);
++	if (want_deco(xsurface)) {
++		return LAB_SSD_MODE_FULL;
++	}
++
++	bool is_normal_toplevel = xsurface->window_type_len == 0
++		|| xwayland_view_contains_window_type(view, LAB_WINDOW_TYPE_NORMAL)
++		|| xwayland_view_contains_window_type(view, LAB_WINDOW_TYPE_DIALOG);
++	return is_normal_toplevel
++		? view_client_decoration_mode(view) : LAB_SSD_MODE_NONE;
++}
++
+ /*
+  * FIXME: this almost duplicates view_discover_output(), which however
+  * (1) is private to view.c and (2) uses current (not pending) geometry
+@@ -270,11 +285,7 @@ ensure_initial_geometry_and_output(struct view *view)
+ 		view_set_output(view, output_nearest_to_cursor());
+ 	}
+ 
+-	if (want_deco(xsurface)) {
+-		view_set_ssd_mode(view, LAB_SSD_MODE_FULL);
+-	} else {
+-		view_set_ssd_mode(view, LAB_SSD_MODE_NONE);
+-	}
++	view_set_ssd_mode(view, xwayland_decoration_mode(view));
+ 
+ 	view_constrain_size_to_that_of_usable_area(view);
+ 
+@@ -374,11 +385,7 @@ handle_associate(struct wl_listener *listener, void *data)
+ 	 */
+ 	view_set_fullscreen(view, xsurface->fullscreen);
+ 	if (!view->been_mapped) {
+-		if (want_deco(xsurface)) {
+-			view_set_ssd_mode(view, LAB_SSD_MODE_FULL);
+-		} else {
+-			view_set_ssd_mode(view, LAB_SSD_MODE_NONE);
+-		}
++		view_set_ssd_mode(view, xwayland_decoration_mode(view));
+ 	}
+ 	enum view_axis axis = VIEW_AXIS_NONE;
+ 	if (xsurface->maximized_horz) {
+@@ -612,17 +619,16 @@ handle_set_decorations(struct wl_listener *listener, void *data)
+ 		wl_container_of(listener, xwayland_view, set_decorations);
+ 	struct view *view = &xwayland_view->base;
+ 
+-	if (want_deco(xwayland_view->xwayland_surface)) {
+-		view_set_ssd_mode(view, LAB_SSD_MODE_FULL);
+-	} else {
+-		view_set_ssd_mode(view, LAB_SSD_MODE_NONE);
+-	}
++	view_set_ssd_mode(view, xwayland_decoration_mode(view));
+ }
+ 
+ static void
+ handle_set_window_type(struct wl_listener *listener, void *data)
+ {
+-	/* Intentionally left blank */
++	struct xwayland_view *xwayland_view =
++		wl_container_of(listener, xwayland_view, set_window_type);
++	view_set_ssd_mode(&xwayland_view->base,
++		xwayland_decoration_mode(&xwayland_view->base));
+ }
+ 
+ static void

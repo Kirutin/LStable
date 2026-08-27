@@ -1,0 +1,56 @@
+[session]
+default = "labwc - lesbian singularity x7"
+
+[user]
+default = "kiru"
+
+[appearance]
+scheme = "Synced"
+password_style = "random"
+hide_logo = false
+theme_mode = "dark"
+corner_radius_scale = 1.0
+font_family = "Noto Sans"
+
+[appearance.palette]
+primary = "#EE0F54"
+on_primary = "#09030B"
+secondary = "#DC2683"
+on_secondary = "#09030B"
+tertiary = "#A855F7"
+on_tertiary = "#09030B"
+error = "#FF4D6D"
+on_error = "#09030B"
+surface = "#05020B"
+on_surface = "#F6D9D8"
+surface_variant = "#120A19"
+on_surface_variant = "#D9A8BE"
+outline = "#B9538A"
+shadow = "#010005"
+hover = "#520535"
+on_hover = "#F6D9D8"
+
+[appearance.wallpaper]
+path = "/var/lib/noctalia-greeter/warehouse-13-lesbian-greeter-wallpaper.png"
+fill_mode = "crop"
+fill_color = "#05020B"
+
+[output]
+width = 1920
+height = 1080
+
+[idle]
+timeout = 300
+
+[cursor]
+theme = "breeze_cursors"
+size = 24
+path = "/usr/share/icons"
+
+[keyboard]
+layout = "de"
+variant = "nodeadkeys"
+numlock = true
+
+[auth]
+allow_empty_password = false

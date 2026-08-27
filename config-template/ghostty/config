@@ -1,0 +1,9 @@
+theme = noctalia
+background-opacity = 0.84
+background-blur = true
+window-padding-x = 6
+window-padding-y = 4
+window-padding-color = background
+cursor-style = block
+cursor-style-blink = false
+unfocused-split-opacity = 0.72

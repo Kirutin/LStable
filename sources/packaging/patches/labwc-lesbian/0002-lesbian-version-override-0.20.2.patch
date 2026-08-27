@@ -1,0 +1,35 @@
+diff --git a/meson.build b/meson.build
+index 283cbb5..22d96e4 100644
+--- a/meson.build
++++ b/meson.build
+@@ -41,11 +41,16 @@ add_project_arguments(cc.get_supported_arguments([
+ ]), language: 'c')
+ 
+ version='"@0@"'.format(meson.project_version())
+-git = find_program('git', native: true, required: false)
+-if git.found()
+-  git_commit = run_command([git, 'describe', '--dirty'], check: false)
+-  if git_commit.returncode() == 0
+-    version = '"@0@"'.format(git_commit.stdout().strip())
++version_override = get_option('lesbian-version')
++if version_override != ''
++  version = '"@0@"'.format(version_override)
++else
++  git = find_program('git', native: true, required: false)
++  if git.found()
++    git_commit = run_command([git, 'describe', '--dirty'], check: false)
++    if git_commit.returncode() == 0
++      version = '"@0@"'.format(git_commit.stdout().strip())
++    endif
+   endif
+ endif
+ add_project_arguments('-DLABWC_VERSION=@0@'.format(version), language: 'c')
+diff --git a/meson_options.txt b/meson_options.txt
+index e059220..907d353 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -8,3 +8,4 @@ option('systemd-session', type: 'feature', value: 'auto', description: 'Install
+ option('static_analyzer', type: 'feature', value: 'disabled', description: 'Run gcc static analyzer')
+ option('test', type: 'feature', value: 'disabled', description: 'Run tests')
+ option('sections', type: 'feature', value: 'disabled', description: 'Show unused functions')
++option('lesbian-version', type: 'string', value: '', description: 'Override the runtime version string for Lesbian Stable packaging')

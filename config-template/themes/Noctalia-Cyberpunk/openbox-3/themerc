@@ -1,0 +1,59 @@
+border.width: 3
+padding.width: 7
+padding.height: 4
+
+window.titlebar.padding.width: 10
+window.titlebar.padding.height: 3
+window.button.width: 22
+window.button.height: 22
+window.button.spacing: 4
+window.button.hover.bg.color: #dc268355
+window.button.hover.bg.corner-radius: 11
+
+window.active.border.color: #ee0f54,#dc2683,#a855f7
+window.inactive.border.color: #520535
+window.active.opacity: 0.98
+window.inactive.opacity: 0.94
+window.active.title.bg: Solid
+window.active.title.bg.color: #05020bd8
+window.inactive.title.bg: Solid
+window.inactive.title.bg.color: #120a19c0
+window.active.label.text.color: #f6d9d8
+window.inactive.label.text.color: #d9a8be
+window.label.text.justify: center
+window.active.button.unpressed.image.color: #f6d9d8
+window.inactive.button.unpressed.image.color: #d9a8be
+window.active.button.close.unpressed.image.color: #ee0f54
+
+window.active.shadow.size: 44
+window.inactive.shadow.size: 28
+window.active.shadow.color: #dc268338
+window.inactive.shadow.color: #00000055
+
+menu.width.min: 220
+menu.width.max: 420
+menu.border.width: 2
+menu.corner-radius: 16
+menu.border.color: #ee0f54
+menu.items.padding.x: 12
+menu.items.padding.y: 8
+menu.items.bg.color: #05020bf2
+menu.items.text.color: #f6d9d8
+menu.items.active.bg.color: #dc2683
+menu.items.active.text.color: #05020b
+menu.separator.color: #520535
+menu.separator.width: 1
+menu.title.bg.color: #120a19
+menu.title.text.color: #ee0f54
+menu.title.text.justify: center
+
+osd.bg.color: #05020bf2
+osd.border.color: #dc2683
+osd.border.width: 2
+osd.cornerRadius: 16
+osd.label.text.color: #f6d9d8
+osd.workspace-switcher.boxes.cornerRadius: 5
+osd.window-switcher.item.active.border.color: #ee0f54
+osd.window-switcher.preview.border.color: #ee0f54,#dc2683,#a855f7
+snapping.overlay.region.border.color: #ee0f54,#dc2683,#a855f7
+snapping.overlay.edge.border.color: #ee0f54,#dc2683,#a855f7
