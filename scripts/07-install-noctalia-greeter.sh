@@ -39,8 +39,8 @@ for path in sys.argv[1:]:
 PY
 
 echo 'Noctalia Greeter wird fuer den naechsten Systemstart eingerichtet.'
-echo 'LightDM bleibt installiert und wird in der laufenden Sitzung nicht beendet.'
-echo 'Zielsitzung: labwc-lesbian-stable'
+echo 'Ein bereits laufender Display Manager wird in dieser Sitzung nicht beendet.'
+echo 'Zielsitzung: labwc - lesbian singularity x7'
 echo 'Tastatur: de (nodeadkeys)'
 
 if ((apply == 0)); then
@@ -69,8 +69,13 @@ do
     cp -a "$source" "$backup_dir$source"
   fi
 done
+
+current_dm_target=''
+current_dm_unit=''
 if [[ -L /etc/systemd/system/display-manager.service ]]; then
   readlink /etc/systemd/system/display-manager.service > "$backup_dir/display-manager.target"
+  current_dm_target="$(readlink -f /etc/systemd/system/display-manager.service || true)"
+  current_dm_unit="$(basename "$current_dm_target")"
 fi
 
 install -D -o root -g root -m 0644 \
@@ -84,18 +89,32 @@ install -o _greetd -g _greetd -m 0640 \
   "$ROOT_DIR/assets/warehouse-13-lesbian-greeter-wallpaper.png" \
   /var/lib/noctalia-greeter/warehouse-13-lesbian-greeter-wallpaper.png
 
-if systemctl list-unit-files lightdm.service >/dev/null 2>&1 &&
-   systemctl list-unit-files lightdm.service | grep -q '^lightdm\.service'; then
-  systemctl disable lightdm.service
-else
-  echo 'LightDM ist auf diesem Zielsystem nicht installiert; kein LightDM-Schritt nötig.'
+# display-manager.service is a shared alias.  Disable the previous manager for
+# future boots without stopping the currently running graphical session, then
+# free the alias before enabling greetd.
+if [[ -n $current_dm_unit && $current_dm_unit != greetd.service ]]; then
+  echo "Bisheriger Display Manager: $current_dm_unit"
+  echo 'Er wird nur fuer den naechsten Boot deaktiviert; die laufende Sitzung bleibt unangetastet.'
+  systemctl disable "$current_dm_unit" >/dev/null 2>&1 || true
 fi
-systemctl enable greetd.service
 
-if [[ $(readlink -f /etc/systemd/system/display-manager.service) != /usr/lib/systemd/system/greetd.service ]]; then
+if [[ -e /etc/systemd/system/display-manager.service || -L /etc/systemd/system/display-manager.service ]]; then
+  rm -f /etc/systemd/system/display-manager.service
+fi
+
+systemctl enable greetd.service
+systemctl daemon-reload
+
+display_manager_target="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)"
+if [[ $(basename "$display_manager_target") != greetd.service ]]; then
   echo 'display-manager.service zeigt nicht auf greetd; Wechsel abgebrochen.' >&2
   exit 1
 fi
 
+if [[ $(systemctl is-enabled greetd.service 2>/dev/null || true) != enabled ]]; then
+  echo 'greetd.service ist nach dem Wechsel nicht aktiviert.' >&2
+  exit 1
+fi
+
 echo "Sicherung: $backup_dir"
-echo 'greetd ist fuer den naechsten Boot aktiviert; LightDM laeuft bis zum Abmelden weiter.'
+echo 'greetd ist fuer den naechsten Boot aktiviert; der bisherige Display Manager laeuft bis zum Abmelden weiter.'
